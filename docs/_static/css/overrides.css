@@ -1,0 +1,224 @@
+/* API Docs Overrides */
+
+.method dl,
+.function dl,
+.class dl,
+.method dl dd,
+.function dl dd,
+.class dl dd {
+  margin-bottom: 0;
+}
+
+.sig-object {
+  width: 100%;
+  line-height: 24px !important;
+}
+.py.property {
+  display: block !important;
+}
+
+.sig-param,
+.sig-return-typehint {
+  /* copied from the source of the theme for the other attributes */
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono,
+    Courier New, Courier, monospace;
+  font-style: normal;
+  font-weight: normal;
+}
+
+.sig-object em.property:not(:first-of-type):last-of-type {
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono,
+    Courier New, Courier, monospace;
+  font-style: normal;
+  font-weight: normal;
+}
+
+.sig-param a,
+.sig-return-typehint a,
+.sig-object em.property:last-of-type a {
+  text-decoration: underline;
+}
+
+/* copied as an override... idk what to tell you... */
+html.writer-html4 .rst-content dl:not(.docutils) > dt,
+html.writer-html5
+  .rst-content
+  dl[class]:not(.option-list):not(.field-list):not(.footnote):not(
+    .citation
+  ):not(.glossary):not(.simple)
+  > dt {
+  padding: 10px 12px;
+}
+
+.sig-return-icon {
+  margin: 0 4px;
+}
+
+.sig-paren {
+  padding: 0 4px;
+}
+
+.sig-return-typehint {
+  font-weight: normal;
+}
+
+/* Nav & Theme */
+
+div[role="navigation"][aria-label="Page navigation"] {
+  display: none;
+}
+
+.wy-nav-content-wrap,
+.wy-nav-content,
+.wy-side-nav-search,
+.wy-nav-side,
+.wy-nav-top {
+  background-color: #fefcfa;
+  color: #202222;
+}
+
+.wy-side-nav-search {
+  text-align: unset;
+}
+.wy-side-nav-search a::before {
+  content: "" !important;
+}
+
+input {
+  border-radius: 6px !important;
+  border-color: #b0adae !important;
+  box-shadow: none !important;
+}
+
+.wy-nav-side:first-child {
+  border-right: 1px solid #d8d6d6 !important;
+}
+
+.wy-menu.wy-menu-vertical {
+  margin-top: -16px;
+}
+
+.wy-menu-vertical a,
+.wy-menu-vertical li a {
+  color: #202222;
+  transition: background-color 0.1s, color 0.1s;
+}
+.wy-menu-vertical a:hover,
+.wy-menu-vertical li a:hover {
+  color: #202222;
+  background-color: #efefef !important;
+}
+.wy-menu-vertical header,
+.wy-menu-vertical p.caption {
+  color: #212529;
+  text-transform: none;
+  margin: 16px 0 0;
+}
+.wy-menu-vertical p.caption::after {
+  content: "";
+  position: absolute;
+  transform: translateX(16px);
+  width: 100%;
+  height: 16px;
+  border-bottom: 1px solid #d8d6d6;
+}
+
+.wy-menu-vertical li.current {
+  background-color: transparent;
+}
+.wy-menu-vertical li.toctree-l1.current > a {
+  border-top: none;
+  border-bottom: none;
+}
+.wy-menu-vertical li.current > a,
+.wy-menu-vertical li.on a {
+  background-color: transparent;
+}
+
+.wy-menu-vertical li.current > a,
+.wy-menu-vertical li.toctree-l2.current > a,
+.wy-menu-vertical li.toctree-l2.current li.toctree-l3 > a {
+  background-color: #f5f5f5;
+}
+
+.toctree-l1[aria-expanded="true"] {
+  background-color: #f5f5f5 !important;
+}
+
+a {
+  color: #51b4cd;
+  transition: color 0.1s;
+}
+a:hover {
+  color: #225564;
+}
+a:visited {
+  color: #225564;
+}
+
+.btn {
+  box-shadow: none;
+  border-radius: 6px;
+}
+
+code {
+  border-radius: 6px;
+  color: #202222 !important;
+}
+
+.highlight-default,
+.highlight-python,
+.highlight-sql,
+.highlight-bash,
+.sd-summary-title .sd-card-header {
+  border-radius: 6px;
+}
+
+footer {
+  visibility: hidden;
+}
+
+footer .rst-footer-buttons {
+  margin-top: 30px;
+  visibility: visible;
+}
+
+/* Content */
+
+section > h2 {
+  margin-top: 60px;
+}
+section > h3 {
+  margin-top: 40px;
+}
+section > h4 {
+  margin-top: 20px;
+}
+
+section > h2,
+section > h3,
+section > h4 {
+  margin-bottom: 12px !important;
+}
+section p {
+  line-height: 1.2;
+  margin-bottom: 12px !important;
+}
+section table p {
+  margin-bottom: 0 !important;
+}
+
+/* Inserted Class Names */
+
+.hb-param-none {
+  opacity: 0.5;
+}
+
+.hb-param-none-default .o,
+.hb-param-none-default .default_value {
+  opacity: 0.5;
+}
+
+.hb-display-none {
+  display: none !important;
+}

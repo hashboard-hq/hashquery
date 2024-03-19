@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hashquery"
+version = "0.1.0"
+authors = [{ name = "Hashboard" }]
+requires-python = ">=3.8"
+classifiers = ["Programming Language :: Python :: 3"]
+dependencies = [
+  'typing_extensions',
+  'requests',
+  'pyarrow',
+  'pandas'
+]
+
+[tool.setuptools]
+package-dir = { 'hashquery' = 'src/' }
