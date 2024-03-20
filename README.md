@@ -23,9 +23,10 @@ Install hashquery with:
 pip install hashquery
 ```
 
-You can verify everything's working by running models against the demo project:
+You can verify everything's working by running models from the demo project:
 
 ```python
+>>> from hashquery.demo import demo_project
 >>> demo_project.models.products.limit(5).run().df
                      id pizza_size pizza_shape  pizza_type  price
 0  14278024243148112051      Large       Round      Custom  13.20
