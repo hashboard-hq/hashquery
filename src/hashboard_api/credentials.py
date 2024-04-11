@@ -1,13 +1,15 @@
 import base64
 import json
 import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional, Protocol
+from typing import Optional
 
 from ..utils.env import env_with_fallback
+from ..utils.version import HASHQUERY_VERSION
 
 
-class HashboardClientCredentials(Protocol):
+class HashboardClientCredentials(ABC):
     """
     Generic class for a method for an external client to authorize into
     Hashboard within a project. Use `get_client_credentials` to form
@@ -16,8 +18,12 @@ class HashboardClientCredentials(Protocol):
 
     project_id: str
 
+    @abstractmethod
     def get_headers(self) -> dict:
-        ...
+        return {
+            "X-GLEAN-UNSAFE-PROJECT-ID": self.project_id,
+            "X-GLEAN-HASHQUERY-VERSION": HASHQUERY_VERSION,
+        }
 
 
 @dataclass
@@ -26,7 +32,10 @@ class HashboardUserJWTClientCredentials(HashboardClientCredentials):
     project_id: str
 
     def get_headers(self) -> dict:
-        return {"X-GLEAN-BASE-JWT": self.user_jwt}
+        return {
+            **super().get_headers(),
+            "X-GLEAN-BASE-JWT": self.user_jwt,
+        }
 
 
 @dataclass
@@ -50,7 +59,10 @@ class HashboardAccessKeyClientCredentials(HashboardClientCredentials):
         self.encoded_key = base64.b64encode(payload_bytes).decode()
 
     def get_headers(self) -> dict:
-        return {"Authorization": self.encoded_key}
+        return {
+            **super().get_headers(),
+            "Authorization": self.encoded_key,
+        }
 
     @classmethod
     def from_encoded_key(cls, key: str) -> "HashboardAccessKeyClientCredentials":

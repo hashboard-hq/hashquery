@@ -6,3 +6,4 @@ from .granularity import GranularityColumnExpression
 from .py_value import PyValueColumnExpression
 from .sql_function import SqlFunctionColumnExpression
 from .sql_text import SqlTextColumnExpression
+from .subquery_expression import SubqueryColumnExpression

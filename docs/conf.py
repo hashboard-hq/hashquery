@@ -66,7 +66,7 @@ myst_enable_extensions = [
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 html_css_files = ["css/overrides.css"]
-html_js_files = ["js/jquery.js", "js/markup.js"]
+html_js_files = ["js/jquery.js", "js/markup.js", "js/analytics.js"]
 html_theme_options = {
     # options here:
     # https://sphinx-rtd-theme.readthedocs.io/en/latest/configuring.html

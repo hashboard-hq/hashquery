@@ -2,12 +2,14 @@ from abc import ABC, abstractmethod
 import datetime
 from typing import *
 
+from ...utils.types import is_iterable
 from ...utils.builder import builder_method
-from ...utils.date_shift import _DateShift
+from ...utils.timeinterval import timeinterval
 from ...utils.keypath import KeyPath, defer_keypath_args, unwrap_keypath_to_name
 from ...utils.serializable import Serializable
 
 if TYPE_CHECKING:
+    from ..model import Model
     from ..namespace import ModelNamespace
 
 
@@ -223,7 +225,7 @@ class ColumnExpression(Serializable, ABC):
 
         return self._is_between_timestamps(
             now().by_month,
-            now().by_month + _DateShift(months=1),
+            now().by_month + timeinterval(unit="months", num=1),
         )
 
     @property
@@ -232,7 +234,7 @@ class ColumnExpression(Serializable, ABC):
         from ...func import now
 
         return self._is_between_timestamps(
-            now().by_month - _DateShift(months=1),
+            now().by_month - timeinterval(unit="months", num=1),
             now().by_month,
         )
 
@@ -243,7 +245,7 @@ class ColumnExpression(Serializable, ABC):
 
         return self._is_between_timestamps(
             now().by_quarter,
-            now().by_quarter + _DateShift(months=3),
+            now().by_quarter + timeinterval(unit="months", num=3),
         )
 
     @property
@@ -252,7 +254,7 @@ class ColumnExpression(Serializable, ABC):
         from ...func import now
 
         return self._is_between_timestamps(
-            now().by_quarter - _DateShift(months=3),
+            now().by_quarter - timeinterval(unit="months", num=3),
             now().by_quarter,
         )
 
@@ -263,7 +265,7 @@ class ColumnExpression(Serializable, ABC):
 
         return self._is_between_timestamps(
             now().by_year,
-            now().by_year + _DateShift(years=1),
+            now().by_year + timeinterval(unit="years", num=1),
         )
 
     @property
@@ -272,16 +274,9 @@ class ColumnExpression(Serializable, ABC):
         from ...func import now
 
         return self._is_between_timestamps(
-            now().by_year - _DateShift(years=1),
+            now().by_year - timeinterval(unit="years", num=1),
             now().by_year,
         )
-
-    def contains(self, val: str, *, case_sensitive=True) -> "ColumnExpression":
-        """
-        Filters the target string column to contain the given substring.
-        """
-        op = "LIKE" if case_sensitive else "ILIKE"
-        return self._binary_op(f"%{val}%", op)
 
     def _is_between_timestamps(
         self,
@@ -291,33 +286,268 @@ class ColumnExpression(Serializable, ABC):
         return (self >= start) & (self < end)
 
     # - Bucketing / Breakout -
+
     def bucket_other(
-        self, *buckets: List[Any], other: Any = "Other"
+        self,
+        *buckets: Union["Model", Any],
+        other: Any = "Other",
     ) -> "ColumnExpression":
         """
         Coerces any values for the target column not in `buckets` into the `other` value.
         """
+        from ..model import Model
         from .cases import CasesColumnExpression
         from .py_value import PyValueColumnExpression
 
         if not isinstance(other, ColumnExpression):
             other = PyValueColumnExpression(other)
 
+        is_model = lambda i: isinstance(i, Model)
+        model_items = [i for i in buckets if is_model(i)]
+        literal_items = [i for i in buckets if not is_model(i)]
+        cases = []
+        if literal_items:
+            cases.append((self._binary_op(literal_items, "IN"), self))
+        for model_item in model_items:
+            cases.append((self.in_(model_item), self))
         return CasesColumnExpression(
-            [(self._binary_op(list(buckets), "IN"), self)],
+            cases,
             other=other,
         ).named(self._optional_identifier)
+
+    # - Containment -
+
+    """
+    Containment APIs open up is a fairly large matrix of potential operations:
+
+    Implemented:
+        str_column.contains(str) --> ColumnExpression:
+
+        array_column.contains(value) --> ColumnExpression:
+            Array containment checks.
+
+        column.in_(str) --> ColumnExpression:
+            Substring matching `LIKE` and `ILIKE`.
+
+        column.in_(array) --> ColumnExpression:
+            Check is a value is within a given list of literal values.
+
+        column.in_(model) --> ColumnExpression:
+            Similar to the `in_(array)`, but the list of values is gathered
+            dynamically from one of the columns on the target model.
+
+        column.contains(other_column) --> ColumnExpression:
+        column.in_(other_column) --> ColumnExpression:
+            Functions as the str implementations but for dynamic inputs.
+
+    Not Planned:
+      model.contains(column) --> ColumnExpression:
+        This at first seems like a reasonable API; it's the inverse of
+        `column.in_(model)`. It is rejected because it encourages users to
+        reference a model within query expressions; the `model` they reference
+        within a column context may not be not the reference they mean.
+        Columns don't have this problem since they are lazily referenced
+        through the `attr` KeyPath.
+
+      Making these APIs accessible via the Python `in` keyword:
+        Python has several restrictions on how types can override this behavior
+        which prevent us from implementing it consistently for the matrix above.
+        More info: https://gist.github.com/glean-charlie/2688a77268cb7d98dd89dad069eb8a2a
+    """
+
+    @overload
+    def in_(
+        self,
+        substr: str,
+        /,
+        *,
+        case_sensitive: bool = True,
+    ) -> "ColumnExpression":
+        """
+        Returns a new `ColumnExpression` which is True for records where
+        this column's value is fully contained within the given `other`
+        substring, else False. See `contains()` for the inverse.
+        """
+        ...
+
+    @overload
+    def in_(
+        self,
+        iterable: Iterable[Any],
+        /,
+        *,
+        case_sensitive: bool = True,
+    ) -> "ColumnExpression":
+        """
+        Returns a new `ColumnExpression` which is True for records where
+        this column's value is one of the values in the provided list,
+        else False.
+        """
+        ...
+
+    @overload
+    def in_(
+        self,
+        model: "Model",
+        /,
+        *,
+        case_sensitive: bool = True,
+    ) -> "ColumnExpression":
+        """
+        Returns a new `ColumnExpression` which is True for records where
+        this column's value is inside of the results for the given model.
+        """
+        ...
+
+    @overload
+    def in_(
+        self,
+        other: "ColumnExpression",
+        /,
+        *,
+        case_sensitive: bool = True,
+    ) -> "ColumnExpression":
+        """
+        Returns a new `ColumnExpression` which is True for records where
+        this column's value is contained within the given `other` column
+        expression.
+        """
+        ...
+
+    def in_(
+        self,
+        other: Union[str, Iterable[Any], "Model", "ColumnExpression"],
+        /,
+        *,
+        case_sensitive: Optional[bool] = True,
+    ) -> "ColumnExpression":
+        """
+        Returns a new `ColumnExpression` which is True for records where
+        this column's value is contained within the given `other` value,
+        else False.
+
+        This method can accept strings for substring checking, iterables
+        for checking if a value is in a given set, or Models for checking
+        if a column is inside of a dynamically collected list of values.
+        """
+        from .py_value import PyValueColumnExpression
+        from .column_name import ColumnNameColumnExpression
+        from .subquery_expression import SubqueryColumnExpression
+        from ...func import distinct
+        from ..model import Model
+
+        def check_no_case_insensitive(type: str):
+            if not case_sensitive:
+                ValueError(
+                    "Option `case_sensitive=False` is not yet supported when "
+                    + f"using `ColumnExpression.in_({type})`"
+                )
+
+        if type(other) == str:
+            return PyValueColumnExpression(other).contains(
+                self, case_sensitive=case_sensitive
+            )
+
+        elif type(other) == Model:
+            check_no_case_insensitive("Model")
+            target_column = (
+                (
+                    # an attribute matching our name
+                    other._attributes.get(self.identifier)
+                    if self._optional_identifier
+                    else None
+                )
+                # else assume there's a matching physical column
+                or ColumnNameColumnExpression(self.identifier)
+            )
+            target_model = other.pick(
+                distinct(target_column).named(target_column.identifier)
+            )
+            return self._binary_op(
+                SubqueryColumnExpression(target_model),
+                "IN",
+            )
+
+        elif isinstance(other, ColumnExpression):
+            check_no_case_insensitive("ColumnExpression")
+            return self._binary_op(other, "IN")
+
+        elif is_iterable(other):
+            check_no_case_insensitive("Iterable")
+            return self._binary_op(list(other), "IN")
+
+        else:
+            raise ValueError(
+                f"Cannot perform `ColumnExpression.in_()` with type: {type(other)}"
+            )
+
+    def contains(
+        self,
+        value: Union[Any, "ColumnExpression"],
+        /,
+        *,
+        case_sensitive: Optional[bool] = True,
+    ) -> "ColumnExpression":
+        """
+        Returns a new `ColumnExpression` which is True for records where this column contains the following value.
+
+        For strings, this is a substring match, with the optional `case_sensitive` setting.
+
+        For arrays, this checks if the array contains the given value. `case_sensitive` is not currently supported for arrays.
+        """
+        from .py_value import PyValueColumnExpression
+
+        if not isinstance(value, ColumnExpression):
+            value = PyValueColumnExpression(value)
+
+        return value._binary_op(
+            self,
+            "IN",
+            {
+                "case_sensitive": case_sensitive,
+            },
+        )
+
+    def contains_any(
+        self,
+        *values: Union[Any, "ColumnExpression"],
+    ) -> "ColumnExpression":
+        """
+        Returns a new ColumnExpression which is True when this column contains any of the given values.
+        """
+        from ... import func
+
+        return func.or_(*[self.contains(value) for value in values])
+
+    def contains_all(
+        self,
+        *values: Union[Any, "ColumnExpression"],
+    ) -> "ColumnExpression":
+        """
+        Returns a new ColumnExpression which is True when this column contains all of the given values.
+        """
+        from ... import func
+
+        return func.and_(*[self.contains(value) for value in values])
 
     # - Operators -
 
     @defer_keypath_args
-    def _binary_op(self, other: object, op: str) -> "ColumnExpression":
+    def _binary_op(
+        self,
+        other: object,
+        op: str,
+        options: Optional[Dict[str, Union[str, bool]]] = None,
+    ) -> "ColumnExpression":
+        from ..model import Model
         from .binary_op import BinaryOpColumnExpression
         from .py_value import PyValueColumnExpression
 
-        if not isinstance(other, ColumnExpression):
+        if isinstance(other, Model):
+            other = other.as_scalar_column_expression()
+        elif not isinstance(other, ColumnExpression):
             other = PyValueColumnExpression(other)
-        return BinaryOpColumnExpression(self, other, op)
+        return BinaryOpColumnExpression(self, other, op, options)
 
     def __eq__(self, other: object):
         return self._binary_op(other, "=")

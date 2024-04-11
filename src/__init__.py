@@ -13,3 +13,6 @@ __all__ = [
     "msr",
     "rel",
 ]
+
+# standard way to export version is as `__version__` for the root package
+from .utils.version import HASHQUERY_VERSION as __version__

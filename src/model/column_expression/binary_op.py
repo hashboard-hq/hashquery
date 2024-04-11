@@ -10,11 +10,13 @@ class BinaryOpColumnExpression(ColumnExpression):
         left: ColumnExpression,
         right: ColumnExpression,
         op: str,
+        options: Optional[Dict[str, Union[str, bool]]] = None,
     ) -> None:
         super().__init__()
         self.left = left
         self.right = right
         self.op = op
+        self.options = options or {}
 
     def default_identifier(self) -> Optional[str]:
         return None
@@ -37,6 +39,7 @@ class BinaryOpColumnExpression(ColumnExpression):
             "left": self.left.to_wire_format(),
             "right": self.right.to_wire_format(),
             "op": self.op,
+            "options": self.options,
         }
 
     @classmethod
@@ -45,5 +48,5 @@ class BinaryOpColumnExpression(ColumnExpression):
         left = ColumnExpression.from_wire_format(wire["left"])
         right = ColumnExpression.from_wire_format(wire["right"])
         return BinaryOpColumnExpression(
-            left, right, wire["op"]
+            left, right, wire["op"], wire["options"]
         )._from_wire_format_shared(wire)

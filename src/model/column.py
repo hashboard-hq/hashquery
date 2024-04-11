@@ -1,5 +1,6 @@
 from typing import *
 
+from ..utils.keypath.keypath import _
 from .column_expression import (
     ColumnExpression,
     ColumnNameColumnExpression,
@@ -62,7 +63,10 @@ def column(
        This name is escaped according to the dialect.
 
     2. `column(sql=str)` will construct an expression which uses the literal
-       SQL, unescaped, as its contents.
+       SQL, unescaped, as its contents. The syntax `{{ some_expr }}` can
+       be used within this SQL string to reference attributes and measure
+       definitions on the given Model. Note that when this is done, the
+       referenced expressions can also become unescaped.
 
     3. `column(value=Any)` will construct an expression which represents
        the provided Python value. For example, `None` is translated to `NULL`.
@@ -70,6 +74,6 @@ def column(
     if name:
         return ColumnNameColumnExpression(name)
     elif sql:
-        return SqlTextColumnExpression(sql)
+        return SqlTextColumnExpression(sql).bind_references_to_model(_)
     else:
         return PyValueColumnExpression(value)

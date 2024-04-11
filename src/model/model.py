@@ -62,41 +62,60 @@ class Model(Serializable):
 
     def _access_identifiable_map(
         self,
-        map_name: str,
+        map_names: Union[str, List[str]],
         identifier: str,
         *,
-        keypath_ctx: KeyPathCtx = None,
+        keypath_ctx: Union[KeyPathCtx, str] = None,
+        syntax: Union[Literal["accessor"], Literal["sql_ref"]] = "accessor",
     ):
         # internal accessor for getting attributes, measures, and relations
-        map: IdentifiableMap = getattr(self, map_name)
-        if result := map.get(identifier):
-            return result
+        map_names = [map_names] if isinstance(map_names, str) else map_names
+        maps: List[IdentifiableMap] = [
+            getattr(self, map_name) for map_name in map_names
+        ]
+        for map in maps:
+            if result := map.get(identifier):
+                return result
+
         # accessing an attr/measure/namespace which doesn't exist is a pretty
         # common pitfall, so put in the extra work to make a good error message
-        map_debug_name = map_name[1:-1]
-        if map_debug_name == "namespace":
-            map_debug_name = "relation"
-        error = [f"No {map_debug_name} named `{identifier}` was found in the model."]
+        map_debug_names = [
+            map_name[1:-1].replace("namespace", "relation") for map_name in map_names
+        ]
+        error = [
+            f"No {' or '.join(map_debug_names)} named `{identifier}` was found in the model."
+        ]
+        did_you_mean = (
+            lambda accessor, id: f"Did you mean `{accessor}.{id}`?"
+            if syntax == "accessor"
+            else "Did you mean `{{" + id + "}}`?"
+        )
         if attr_result := self._attributes.get(identifier):
             error.append(f"An attribute ({attr_result}) was found instead. ")
             error.append(
                 "This was potentially caused because measures are converted "
                 + "to attributes after an aggregation. "
             )
-            error.append(f"Did you mean to use `attr.{identifier}`?")
+            error.append(did_you_mean("attr", identifier))
         if measure_result := self._measures.get(identifier):
             error.append(f"A measure ({measure_result}) was found instead. ")
-            error.append(f"Did you mean to use `msr.{identifier}`?")
+            error.append(did_you_mean("msr", identifier))
         if self._namespaces.get(identifier):
             error.append(f"A model relation was found instead. ")
-            error.append(f"Did you mean to use `rel.{identifier}`?")
-        if map_name == "_namespaces":
+            error.append(did_you_mean("rel", identifier))
+        if "_namespaces" in map_names:
             # look for if the next access is against an attribute we have,
             # in which case this mistake was that they didn't realize the
             # relation had been flattened.
-            next_access = keypath_ctx.remaining_keypath._key_path_components[0]
+            next_access = (
+                keypath_ctx.remaining_keypath._key_path_components[0]
+                if isinstance(keypath_ctx, KeyPathCtx)
+                else keypath_ctx
+            )
             next_access_name: str = None
-            if type(next_access) is KeyPathComponentProperty:
+            if type(next_access) is str:
+                next_access_name = next_access
+            elif type(next_access) is KeyPathComponentProperty:
                 next_access_name = next_access.name
             next_access_attr = (
                 self._attributes.get(next_access_name) if next_access_name else None
@@ -107,13 +126,16 @@ class Model(Serializable):
                     "A transformation may have moved the attribute "
                     + f"from the {identifier} relation to being directly available. "
                 )
-                error.append(f"Did you mean `attr.{next_access_name}`?")
+                error.append(did_you_mean("attr", next_access_name))
         if len(error) == 1:
-            error.append(
-                f"Available {map_debug_name}s: {', '.join(map.keys())}"
-                if map
-                else f"No {map_debug_name}s are defined for this model."
-            )
+            for idx, map_name in enumerate(map_names):
+                map: IdentifiableMap = getattr(self, map_name)
+                debug_name = map_debug_names[idx]
+                error.append(
+                    f"Available {debug_name}s: {', '.join(map.keys())}"
+                    if map
+                    else f"No {debug_name}s are defined for this model."
+                )
         raise AttributeError("\n".join(error))
 
     def __repr__(self):
@@ -268,8 +290,7 @@ class Model(Serializable):
                 "`.with_join_one` must specify a join condition using "
                 + "`foreign_key=<foreign_key>` and/or `condition=<column_expression>`"
             )
-        if type(joined) == KeyPath:
-            joined = resolve_keypath(self, joined)
+        joined = resolve_keypath(self, joined)
         relation_name = unwrap_keypath_to_name(named)
         if not relation_name:
             if default_identifier := joined._source._default_identifier():
@@ -286,11 +307,7 @@ class Model(Serializable):
         # -- determine the column expression to join with --
         join_predicate = None
         if foreign_key is not None:
-            foreign_key: ColumnExpression = (
-                resolve_keypath(self, foreign_key)
-                if isinstance(foreign_key, KeyPath)
-                else foreign_key
-            )
+            foreign_key: ColumnExpression = resolve_keypath(self, foreign_key)
             join_predicate = foreign_key == joined._primary_key.disambiguated(
                 relation_name
             )

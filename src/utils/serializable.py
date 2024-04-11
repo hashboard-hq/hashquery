@@ -5,14 +5,14 @@ from typing import Type
 
 from typing_extensions import Self
 
-from .date_shift import _DateShift
+from .timeinterval import timeinterval
 
 HASHQUERY_WIRE_VERSION_KEY = "_version"
 # This is a version number for the wire format of Hashquery.
 # Increase it if you ever make a backwards incompatible change
 # to a `to_wire_format`/`from_wire_format` pair, or if you change
 # the JSON payload for `RunResults`.
-HASHQUERY_WIRE_VERSION = 4
+HASHQUERY_WIRE_VERSION = 6
 
 
 class Serializable(ABC):
@@ -31,11 +31,11 @@ class Serializable(ABC):
             return {"$typeKey": "py.date", "iso": value.isoformat()}
         elif isinstance(value, timedelta):
             return {"$typeKey": "py.timedelta", "seconds": int(value.total_seconds())}
-        elif isinstance(value, _DateShift):
+        elif isinstance(value, timeinterval):
             return {
-                "$typeKey": "py.shift",
-                "years": value.years,
-                "months": value.months,
+                "$typeKey": "py.timeinterval",
+                "unit": value.unit,
+                "num": value.num,
             }
         # directly serializable to JSON without type information
         return value
@@ -51,15 +51,14 @@ class Serializable(ABC):
             return date.fromisoformat(wire["iso"])
         elif type_key == "py.timedelta":
             return timedelta(seconds=wire["seconds"])
-        elif type_key == "py.shift":
-            return _DateShift(
-                years=wire["years"],
-                months=wire["months"],
+        elif type_key == "py.timeinterval":
+            return timeinterval(
+                unit=wire["unit"],
+                num=wire["num"],
             )
         else:
             raise ValueError(
-                "Cannot deserialize value. `$typeKey` is present but an unrecognized type. "
-                + wire
+                f"Cannot deserialize value. `$typeKey` is present but an unrecognized type. {wire}"
             )
 
     def __init_subclass__(cls) -> None:

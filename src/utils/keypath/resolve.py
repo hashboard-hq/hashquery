@@ -1,6 +1,6 @@
 import inspect
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from .keypath import (
     BoundKeyPath,
@@ -12,49 +12,45 @@ from .keypath import (
 from .keypath_ctx import KeyPathCtx
 
 
-def get_keypath_resolver(keypath: KeyPath) -> Callable[[Any], Any]:
-    """
-    Given a keypath, returns it as a callable accessor function.
-    """
-
-    def resolver(root: Any) -> Any:
-        current = root
-        if type(keypath) == BoundKeyPath:
-            current = keypath._bound_root
-
-        for component_idx, component in enumerate(keypath._key_path_components):
-            if type(component) is KeyPathComponentProperty:
-                current = getattr(current, component.name)
-            elif type(component) is KeyPathComponentSubscript:
-                current = current[component.key]
-            elif type(component) is KeyPathComponentCall:
-                args = resolve_all_nested_keypaths(root, component.args)
-                kwargs = resolve_all_nested_keypaths(root, component.kwargs)
-                if component.include_keypath_ctx:
-                    kwargs["keypath_ctx"] = KeyPathCtx(
-                        root=root,
-                        current=current,
-                        full_keypath=keypath,
-                        current_keypath_component=component,
-                        remaining_keypath=KeyPath(
-                            keypath._key_path_components[component_idx + 1 :]
-                        ),
-                    )
-                current = current(*args, **kwargs)
-            else:
-                raise AssertionError(f"Invalid keypath component: {type(component)}")
-        return current
-
-    return resolver
-
-
 def resolve_keypath(root: Any, keypath: KeyPath) -> Any:
     """
     Given a root and a KeyPath, resolves the keypath for that root
-    and returns the final result (or fails with `AttributeError` if the
-    keypath is invalid for that root).
+    and returns the final result.
+
+    If the given `keypath` argument is not a KeyPath, this will just return
+    it as is, since it already represents a resolved value.
     """
-    return get_keypath_resolver(keypath)(root)
+    if not isinstance(keypath, KeyPath):
+        return keypath
+
+    current = root
+    if type(keypath) == BoundKeyPath:
+        current = keypath._bound_root
+
+    for component_idx, component in enumerate(keypath._key_path_components):
+        if type(component) is KeyPathComponentProperty:
+            current = getattr(current, component.name)
+        elif type(component) is KeyPathComponentSubscript:
+            current = current[component.key]
+        elif type(component) is KeyPathComponentCall:
+            args = resolve_all_nested_keypaths(root, component.args)
+            kwargs = resolve_all_nested_keypaths(root, component.kwargs)
+            if component.include_keypath_ctx:
+                kwargs["keypath_ctx"] = KeyPathCtx(
+                    root=root,
+                    current=current,
+                    full_keypath=keypath,
+                    current_keypath_component=component,
+                    remaining_keypath=KeyPath(
+                        keypath._key_path_components[component_idx + 1 :]
+                    ),
+                )
+            current = current(*args, **kwargs)
+        else:
+            raise AssertionError(f"Invalid keypath component: {type(component)}")
+
+    # a KeyPath may result in another KeyPath, which we need to further resolve
+    return resolve_keypath(root, current)
 
 
 def resolve_all_nested_keypaths(root: Any, values) -> Any:
@@ -74,7 +70,10 @@ def resolve_all_nested_keypaths(root: Any, values) -> Any:
     elif type(values) is tuple:
         return (resolve_all_nested_keypaths(root, nested) for nested in values)
     elif isinstance(values, KeyPath):
-        return resolve_keypath(root, values)
+        # a KeyPath may result in a structure containing more KeyPaths,
+        # which we need to further resolve
+        next = resolve_keypath(root, values)
+        return resolve_all_nested_keypaths(root, next)
     else:
         return values
 
