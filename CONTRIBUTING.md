@@ -5,7 +5,7 @@ but we're open to commits, issues, and suggestions from everyone.
 
 ## Bugs, Support, and Getting Help
 
-Bugs can be filed here: https://github.com/hashboard-hq/hashquery/issues/new?template=bug--or-need-help.md
+Bugs can be filed here: https://github.com/hashboard-hq/hashquery/issues/new?template=bug.md
 
 > If you are a current Hashboard customer, you can also ask or get help with
 > Hashquery through Slack or any other Hashboard support channel.
@@ -13,7 +13,7 @@ Bugs can be filed here: https://github.com/hashboard-hq/hashquery/issues/new?tem
 ## Suggestions, Ideas, and New Features
 
 Anyone with a good idea can help shape the future features and direction of
-Hashquery. We'd love to hear yours here: https://github.com/hashboard-hq/hashquery/issues/new?template=feature--enhancement--or-idea.md
+Hashquery. We'd love to hear yours here: https://github.com/hashboard-hq/hashquery/issues/new?template=idea.md
 
 ## Submitting PRs
 
