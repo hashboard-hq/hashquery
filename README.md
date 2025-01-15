@@ -110,4 +110,4 @@ During the beta, hashquery integrates with [Hashboard](https://hashboard.com) to
 - **How does this differ from other analytics DSLs like LookML or Malloy?**
   We built hashquery because we loved the expressiveness and power of data modeling languages like Malloy but wanted to avoid the portability and developer experience drawbacks of custom DSLs. Hashquery is a python package that can run anywhere, and it can be used as a querying language, a semantic layer, or a headless BI API — or all three at once.
 - **Do I need to be a Hashboard user to use hashquery?**
-  During the beta, the hashquery SQL compiler is not available to run locally, so you do need to define your data connections inside of Hashboard and use its API to execute your queries. But we do plan on making the full hashquery stack available to run locally in the near future.
+  Nope! You can use hashquery as a standalone library to compile and run SQL queries.
