@@ -1,4 +1,4 @@
-# Advanced KeyPaths
+# Advanced: KeyPaths
 
 ```{eval-rst}
 .. currentmodule:: hashquery

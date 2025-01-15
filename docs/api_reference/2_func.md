@@ -12,11 +12,11 @@ from hashquery import *
 func.count()
 
 # import func
-from hashquery import func
+from hashquery.model import func
 func.count()
 
 # direct named import
-from hashquery.func import count
+from hashquery.model.func import count
 count()
 ```
 

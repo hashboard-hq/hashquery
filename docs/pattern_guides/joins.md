@@ -1,11 +1,6 @@
 # Joining Tables
 
-Hi there! We're working hard on shipping the first version of
-Hashquery, and have not yet had time to compile a detailed guide
-on joining.
-
-In the meantime, we've decided to just drop in a complete example of
-building two models from scratch and then joining them:
+Example of building two models from scratch and then joining them:
 
 ```python
 from hashquery import *

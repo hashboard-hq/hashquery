@@ -16,17 +16,17 @@ class UnionSource(Source):
 
     __TYPE_KEY__ = "union"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
-            "base": self.base.to_wire_format(),
-            "unionSource": self.union_source.to_wire_format(),
+            **super()._to_wire_format(),
+            "base": self.base._to_wire_format(),
+            "unionSource": self.union_source._to_wire_format(),
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict):
+    def _from_wire_format(cls, wire: dict):
         assert wire["subType"] == cls.__TYPE_KEY__
         return UnionSource(
-            Source.from_wire_format(wire["base"]),
-            Source.from_wire_format(wire["unionSource"]),
+            Source._from_wire_format(wire["base"]),
+            Source._from_wire_format(wire["unionSource"]),
         )

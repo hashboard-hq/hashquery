@@ -1,52 +1,80 @@
-from typing import *
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import *
 
+from ..run.run import run
+from ..utils.activity_schema import normalize_step_names, normalize_steps
 from ..utils.builder import builder_method
-from ..utils.serializable import Serializable
-from ..utils.keypath import (
-    _,
-    resolve_keypath_args_from,
-    resolve_keypath,
-    unwrap_keypath_to_name,
-    KeyPath,
-)
-from ..utils.keypath.keypath_ctx import KeyPathCtx
-from ..utils.keypath.keypath import KeyPathComponentProperty
+from ..utils.equals import deep_equal
 from ..utils.identifiable import IdentifiableMap
+from ..utils.keypath import (
+    KeyPath,
+    _,
+    resolve_all_nested_keypaths,
+    resolve_keypath,
+    resolve_keypath_args_from,
+    unwrap_keypath_to_name,
+)
+from ..utils.keypath.keypath import KeyPathComponentProperty
+from ..utils.keypath.keypath_ctx import KeyPathCtx
 from ..utils.resource import LinkedResource
-from .data_connection import DataConnection
-from .column_expression import ColumnExpression
+from ..utils.serializable import Serializable
+from . import func
+from .activity_schema import ModelActivitySchema
 from .column import column
-from .. import func
+from .column_expression import ColumnExpression
+from .connection import Connection
+from .namespace import ModelNamespace
 from .source import (
-    Source,
-    TableNameSource,
-    SqlTextSource,
     AggregateSource,
     FilterSource,
+    JoinOneSource,
+    LimitSource,
+    MatchStepsSource,
     PickSource,
     SortSource,
-    LimitSource,
-    JoinOneSource,
-    MatchStepsSource,
+    Source,
+    SqlTextSource,
+    TableNameSource,
     UnionSource,
 )
-from .namespace import ModelNamespace
-from .activity_schema import ModelActivitySchema
-from ..run.post_run_endpoint import post_run_endpoint
+
+FUNNEL_COUNT_COLUMN_NAME = "entities"
 
 
 class Model(Serializable):
-    def __init__(self) -> None:
+    @overload
+    def __init__(
+        self, connection: Connection, table: str, *, schema: Optional[str] = None
+    ):
         """
-        Initializes a new empty Model.
+        Initialize a new Model for the provided table in the given connection.
+        """
+        ...
 
-        This Model begins with absolutely nothing in it. To attach a root data
-        frame (such as a `table`), your likely want to call `.with_data_source()`
-        soon-after.
+    @overload
+    def __init__(self, connection: Connection, *, sql_query: str):
         """
-        self._connection: DataConnection = None
+        Initialize a new Model which runs the provided sql query inside of the
+        given connection.
+        """
+        ...
+
+    @overload
+    def __init__(self):
+        """
+        Initialize a new Model that is completely empty.
+
+        This Model will have absolutely nothing in it and will not be queryable
+        until a connection and a source table is attached with
+        `.with_connection()` and `.with_source()`.
+        """
+        ...
+
+    def __init__(
+        self, connection=None, table=None, *, sql_query=None, schema=None
+    ) -> None:
+        self._connection: Connection = None
         self._source: Source = None
         self._attributes = IdentifiableMap[ColumnExpression]()
         self._measures = IdentifiableMap[ColumnExpression]()
@@ -57,6 +85,16 @@ class Model(Serializable):
         # internally used to understand the origin of a model
         # and its relation to an original Hashboard resource
         self._linked_resource: Optional[LinkedResource] = None
+
+        if connection:
+            Model.with_connection.mutate(self, connection)
+        if table or sql_query or schema:
+            Model.with_source.mutate(
+                self,
+                table=table,
+                schema=schema,
+                sql_query=sql_query,
+            )
 
     # --- Public accessors ---
 
@@ -85,8 +123,8 @@ class Model(Serializable):
         error = [
             f"No {' or '.join(map_debug_names)} named `{identifier}` was found in the model."
         ]
-        did_you_mean = (
-            lambda accessor, id: f"Did you mean `{accessor}.{id}`?"
+        did_you_mean = lambda accessor, id: (
+            f"Did you mean `{accessor}.{id}`?"
             if syntax == "accessor"
             else "Did you mean `{{" + id + "}}`?"
         )
@@ -109,7 +147,10 @@ class Model(Serializable):
             # relation had been flattened.
             next_access = (
                 keypath_ctx.remaining_keypath._key_path_components[0]
-                if isinstance(keypath_ctx, KeyPathCtx)
+                if (
+                    isinstance(keypath_ctx, KeyPathCtx)
+                    and keypath_ctx.remaining_keypath._key_path_components
+                )
                 else keypath_ctx
             )
             next_access_name: str = None
@@ -153,64 +194,40 @@ class Model(Serializable):
             result.append(indented_namespace_repr)
         return "\n".join(result)
 
-    @property
-    def _project_id(self):
-        if pid := (self._linked_resource and self._linked_resource.project_id) or (
-            self._connection and self._connection.project_id
-        ):
-            return pid
-        return None
-
     # --- Adding Properties ---
 
-    @overload
-    def with_source(
-        self,
-        connection: DataConnection,
-        table_name: str,
-        schema: Optional[str] = None,
-    ) -> "Model":
+    @builder_method
+    def with_connection(self, connection: Connection) -> "Model":
         """
-        Returns a new Model which uses the provided table (and optionally a
-        schema) as the underlying data. Names will be escaped according to the
-        database dialect.
+        Returns a new Model which runs inside of the provided Connection.
+        If the model already had a connection attached, this overwrites it.
+        """
+        self._connection = connection
+
+    @overload
+    def with_source(self, table: str, schema: Optional[str] = None) -> "Model":
+        """
+        Returns a new Model which uses the provided table as the underlying
+        data. If the model already had a source attached, this overwrites it.
         """
         ...
 
     @overload
-    def with_source(
-        self,
-        connection: DataConnection,
-        *,
-        sql_query: str,
-    ) -> "Model":
+    def with_source(self, *, sql_query: str) -> "Model":
         """
         Returns a new Model which uses the provided SQL query as the underlying
-        table. This query is not escaped or touched by the compiler.
+        table. If the model already had a source attached, this overwrites it.
         """
         ...
 
     @builder_method
-    def with_source(
-        self,
-        connection: DataConnection,
-        table_name: Optional[str] = None,
-        schema: Optional[str] = None,
-        *,
-        sql_query: Optional[str] = None,
-    ) -> "Model":
+    def with_source(self, table=None, *, schema=None, sql_query=None) -> "Model":
         """
-        Returns a new Model with the provided data source as the underlying
-        table.
-
-        If the receiver already had a source attached, this overwrites that
-        reference, including any transformations to it.
+        Returns a new Model which uses the provided content as the underlying
+        table. If the model already had a source attached, this overwrites it.
         """
-        self._connection = connection
         self._source = (
-            SqlTextSource(sql_query)
-            if sql_query
-            else TableNameSource(table_name, schema)
+            SqlTextSource(sql_query) if sql_query else TableNameSource(table, schema)
         )
 
     @builder_method
@@ -222,7 +239,7 @@ class Model(Serializable):
     ) -> "Model":
         """
         Returns a new Model with the provided column expressions included as
-        attributes, accessible via `a.<name>`. If a string is passed, it will
+        attributes, accessible via `attr.<name>`. If a string is passed, it will
         be interpreted as a column name (aka `column(str)`).
         """
         normalize = lambda c: (
@@ -252,7 +269,7 @@ class Model(Serializable):
     ) -> "Model":
         """
         Returns a new Model with the provided column expressions included as
-        measure definitions, accessible via `m.<name>`. This does not perform
+        measure definitions, accessible via `msr.<name>`. This does not perform
         any aggregation on its own, this only attaches a definition for later
         use.
         """
@@ -315,12 +332,14 @@ class Model(Serializable):
         # `foreign_key=` so add it to `_namespaces` here
         self._namespaces.add(relation)
         if condition is not None:
-            condition_predicate = resolve_keypath(self, condition)
+            condition = resolve_keypath(self, condition)
             join_predicate = (
-                condition_predicate
+                condition
                 if not join_predicate
-                else join_predicate & condition_predicate
+                else func.and_(join_predicate, condition)
             )
+        if foreign_key and not condition:
+            relation._through_foreign_key_attr = foreign_key
 
         # -- attach the final join source --
         self._source = JoinOneSource(
@@ -391,14 +410,29 @@ class Model(Serializable):
     @resolve_keypath_args_from(_.self)
     def match_steps(
         self,
-        *steps: str,
+        steps: List[Union[str, ColumnExpression, Tuple[str, str]]],
+        *,
         group: Optional[ColumnExpression] = None,
         timestamp: Optional[ColumnExpression] = None,
         event_key: Optional[ColumnExpression] = None,
+        partition_start_events: Optional[List[ColumnExpression]] = None,
+        time_limit: Optional[timedelta] = None,
     ) -> "Model":
         """
         Returns a new Model with a new property that represents the records
         matched to a sequence of steps, aggregated by `group`.
+
+        :arg steps: The sequence of steps to analyze. If a string is passed, it will be matched to values in the
+                    `event_key` column. If a boolean column expression is passed, an event will be considered a match
+                    if it passes the condition. A string step value can be a tuple to denote (step_value, output_name)
+                    which can be used to provide unique names when matching the same step multiple times.
+        :arg group: The column to group the analysis by. This is typically a unique identifier for a user/customer/etc.
+        :arg timestamp: The temporal column to order the events by.
+        :arg event_key: The column representing the name of the event.
+        :arg partition_start_events: A list of column expressions to partition the funnel analysis by.
+                                     These grouping expressions are applied only to the first event in the journey.
+        :arg time_limit: The maximum time allowed between the initial step and any subsequent step.
+                         If a user takes longer than this time for a given step, future steps are not matched.
 
         Useful for defining funnels, retention, or temporal joins.
         """
@@ -406,30 +440,46 @@ class Model(Serializable):
         events_model = deepcopy(self)
 
         # normalize the activity schema, defaulting to what was modeled
-        activity_schema = (
-            ModelActivitySchema(group=group, timestamp=timestamp, event_key=event_key)
-            if (group and timestamp and event_key)
-            else self._activity_schema
+        activity_schema = self._require_normalized_activity_schema(
+            group, timestamp, event_key, "match_steps"
         )
-        if not activity_schema:
-            raise ValueError(
-                "`match_steps` requires the model to have an activity schema defined. "
-                + "Use `.with_activity_schema` to define the schema upstream, "
-                + "or fully qualify `group`, `timestamp` and `event_key` in the call to `match_steps`"
-            )
+        if not steps:
+            raise ValueError("`match_steps` requires at least one step to match.")
+
+        # Converts steps into a normalized list of column expressions
+        step_conditions = normalize_steps(list(steps), activity_schema)
 
         # attach the source transform to build and attach step event data
         self._source = MatchStepsSource(
             base=self._source,
             activity_schema=activity_schema,
-            steps=steps,
+            steps=step_conditions,
+            partition_start_events=partition_start_events,
+            time_limit=time_limit,
         )
 
+        # drop all namespaces except those which were joined exactly on our
+        # `group` since that join will still be possible afterwards
+        step_names = set(step.identifier for step in step_conditions)
+        self._namespaces = IdentifiableMap[ModelNamespace](
+            namespace
+            for namespace in self._namespaces
+            if namespace._identifier not in step_names  # favor steps
+            and deep_equal(namespace._through_foreign_key_attr, activity_schema.group)
+        )
+        # reattach the joins, since they will have been consumed
+        for preserved_joined_namespace in self._namespaces:
+            Model.with_join_one.mutate(
+                self,
+                preserved_joined_namespace._nested_model,
+                foreign_key=preserved_joined_namespace._through_foreign_key_attr,
+                named=preserved_joined_namespace._identifier,
+            )
         # add a new namespace for each step containing the attributes
         # on the events table, which the `MatchStepsSource` will generate
-        self._namespaces = IdentifiableMap[ModelNamespace]()
-        for step in steps:  # self join on each step's name
-            self._namespaces.add(ModelNamespace(step, events_model))
+        for step in step_conditions:
+            # self join on each step's identifier
+            self._namespaces.add(ModelNamespace(step.identifier, events_model))
 
         # reset the attributes to only what will be available after transform
         self._attributes = IdentifiableMap([column(activity_schema.group.identifier)])
@@ -438,44 +488,94 @@ class Model(Serializable):
             func.cases(
                 *[
                     (
-                        activity_schema.event_key.disambiguated(step) != None,
-                        step,
+                        activity_schema.timestamp.disambiguated(step.identifier)
+                        != None,
+                        step.identifier,
                     )
-                    for step in reversed(steps)
+                    for step in reversed(step_conditions)
                 ],
                 other=None,
             ).named("last_matched_step_name")
         )
+        self._attributes.add(
+            func.cases(
+                *[
+                    (
+                        activity_schema.timestamp.disambiguated(step.identifier)
+                        != None,
+                        len(step_conditions) - 1 - i,
+                    )
+                    for i, step in enumerate(reversed(step_conditions))
+                ],
+                other=None,
+            ).named("last_matched_step_index")
+        )
+        for partition in partition_start_events or []:
+            self._attributes.add(
+                column(partition.identifier).named(partition.identifier)
+            )
         self._primary_key = activity_schema.group  # best effort
 
         # reset the measures
         self._measures = IdentifiableMap()
-        self._measures.add(func.count())
-        for step in steps:
+        self._measures.add(func.count().named(FUNNEL_COUNT_COLUMN_NAME))
+        for step in step_conditions:
             # helper to get the count of records which reached the step
+            #
+            # We check that the event timestamp is not NULL to verify this.
+            # Checking entity/group or event_key is not sufficient, since
+            # those could (correctly) have NULL values.
+            step_id = step.identifier
             self._measures.add(
                 func.count_if(
-                    activity_schema.event_key.disambiguated(step) != None
-                ).named(f"{step}_count")
+                    activity_schema.timestamp.disambiguated(step_id) != None
+                ).named(f"{step_id}_count")
             )
 
         # the existing activity schema's properties have been consumed
         # and are no longer valid
         self._activity_schema = None
 
-    @resolve_keypath_args_from(_.self)
     def funnel(
         self,
-        *steps: str,
+        steps: List[Union[str, ColumnExpression, Tuple[str, str]]],
+        *,
         group: Optional[ColumnExpression] = None,
         timestamp: Optional[ColumnExpression] = None,
         event_key: Optional[ColumnExpression] = None,
+        time_limit: Optional[timedelta] = None,
+        partition_start_events: Optional[List[ColumnExpression]] = None,
+        partition_matches: Optional[List[ColumnExpression]] = None,
+        top_of_funnel: Optional[Union[int, str]] = 0,
     ) -> "Model":
         """
         Returns a new Model which performs a funnel analysis on the
         provided sequence of steps.
 
-        For example::
+        :arg steps: The sequence of steps to analyze. If a string is passed, it will be matched to values in the
+                    `event_key` column. If a boolean column expression is passed, an event will be considered a match
+                    if it passes the condition. A string step value can be a tuple to denote (step_value, output_name)
+                    which can be used to provide unique names when matching the same step multiple times.
+        :arg group: The column to group the funnel analysis by. This is typically a unique identifier for a user/customer/etc.
+        :arg timestamp: The temporal column to order the events by.
+        :arg event_key: The column representing the name of the event.
+        :arg time_limit: The maximum time allowed between the initial funnel step and any subsequent step.
+                         If a user takes longer than this time for a given step, they are not counted in the
+                        funnel for that step.
+        :arg partition_start_events: A list of column expressions to partition the first events in the funnel analysis by.
+                                     This can result in single entities being evaluated and counted multiple times in the funnel
+                                     analysis -- once per value of the partitions.
+        :arg partition_matches: A list of column expressions to group a cohort of users together. The funnel
+                                will split the aggregated counts of each step into separate groups for each of these expressions.
+                                This can be used to further break out the entities flowing through the funnel.
+        :arg top_of_funnel:
+            Determines where and how the funnel "starts".
+            If an index, the funnel begins at that step's index. All steps will be matched, this only affects the output table.
+            If a string, the funnel includes an extra step which represents the count of all evaluated entities.
+                The name will match the passed string.
+            The default is `0`, meaning the funnel starts on the first step.
+
+        Example::
 
             events # this is presorted only for clarity, it need not be sorted
             '''
@@ -504,16 +604,19 @@ class Model(Serializable):
             6           other_event             2024-01-01
             '''
 
-            events.funnel("ad_impression", "visit", "purchase")
+            events.funnel(
+                top_of_funnel="users",
+                steps=["ad_impression", "visit", "purchase"]
+            )
             '''
             step                 count
             ------------------------------
-            count                7
+            users                7
             ad_impression        5
             visit                5
             purchase             2
             '''
-            # `count` is 7 because there are 7 unique users.
+            # `users` is 7 because there are 7 unique users.
             # `ad_impression` is 5 because of those 7 unique users, 5 of them saw an ad:
             #        This is users 0, 1, 2, 3, and 4.
             #        Users 5 and 6 did not see ads, so they are not included.
@@ -524,21 +627,247 @@ class Model(Serializable):
             #        This is users 0 and 1. User 1 made two purchases but is only counted once.
             #        User 5 purchased, but not after seeing an ad and visiting, so they are not included in the funnel.
         """
+        # need to resolve these now, and `partition_matches` is resolved later. This is because
+        # the keypaths for partition_matches are resolved via the model outputted by `match_steps`.
+        steps = resolve_all_nested_keypaths(self, steps)
+        group = resolve_all_nested_keypaths(self, group)
+        timestamp = resolve_all_nested_keypaths(self, timestamp)
+        event_key = resolve_all_nested_keypaths(self, event_key)
+        time_limit = resolve_all_nested_keypaths(self, time_limit)
+        partition_start_events = resolve_all_nested_keypaths(
+            self, partition_start_events or []
+        )
+
+        # Validate the activity schema up front.
+        activity_schema = self._require_normalized_activity_schema(
+            group, timestamp, event_key, "funnel"
+        )
+
+        top_of_funnel_start_index = (
+            top_of_funnel if type(top_of_funnel) is int else None
+        )
+        top_of_funnel_name = top_of_funnel if type(top_of_funnel) is str else "entities"
+        if top_of_funnel_start_index is not None and top_of_funnel_start_index < 0:
+            raise ValueError("Invalid `top_of_funnel` index. Cannot be negative.")
+        if top_of_funnel_start_index is not None and top_of_funnel_start_index >= len(
+            steps
+        ):
+            raise ValueError(
+                "There are not enough steps in the funnel to filter the "
+                + "funnel to the provided `top_of_funnel` index"
+            )
+        if type(top_of_funnel) is str and partition_start_events:
+            raise ValueError(
+                "Incompatible arguments: `top_of_funnel` cannot be a string when partitioning with `partition_start_events`."
+            )
+
+        if len(steps) == 0:
+            # when there are no steps, return the "top of the funnel", which
+            # is most efficiently calculated by taking a simple aggregate
+            count_distinct_groups = func.count(
+                func.distinct(activity_schema.group)
+            ).named(FUNNEL_COUNT_COLUMN_NAME)
+            return self.aggregate(
+                measures=[
+                    column(value=top_of_funnel_name).named("step"),
+                    count_distinct_groups,
+                ]
+            )
+
+        step_names = normalize_step_names(steps)
         matched = self.match_steps(
-            *steps,
+            steps,
             group=group,
             timestamp=timestamp,
             event_key=event_key,
+            time_limit=time_limit,
+            partition_start_events=partition_start_events,
         )
-        aggregated = matched.aggregate(groups=[], measures=list(matched._measures))
+        partition_start_events_output_exprs = [
+            column(expr.identifier) for expr in partition_start_events or []
+        ]
+        partition_matches = resolve_all_nested_keypaths(
+            matched, partition_matches or []
+        )
+        all_partitions = partition_start_events_output_exprs + partition_matches
+
+        aggregated = matched.aggregate(
+            groups=all_partitions,
+            measures=list(matched._measures),
+        )
+        all_step_value_columns = [
+            column(FUNNEL_COUNT_COLUMN_NAME).named(top_of_funnel_name)
+        ] + [column(f"{step_id}_count").named(step_id) for step_id in step_names]
         folded = aggregated.fold(
-            ids=[],
-            values=[column("count")]
-            + [column(f"{step}_count").named(step) for step in steps],
+            ids=[column(g.identifier) for g in all_partitions],
+            values=(
+                all_step_value_columns
+                if top_of_funnel_start_index is None
+                else all_step_value_columns[(top_of_funnel_start_index + 1) :]
+            ),
             key_name="step",
-            value_name="count",
+            value_name=FUNNEL_COUNT_COLUMN_NAME,
         )
-        return folded.sort(column("count") * -1)
+        # We explicitly SELECT * here, even though it may not be strictly necessary in all cases.
+        #
+        # This is because the below sorting logic is done over the **output** names of the fold operation above.
+        #
+        # Ordering by output names directly is supported in all SQL dialects, but some do **not** support using those
+        # output names in arbitrary expressions, such as CASE statements (which we use below).
+        # TODO(HB-10765): we should revisit ORDER BY name resolution in Hashquery.
+        #
+        # To avoid this, we explicitly SELECT * here which will lift us into a new CTE, and then
+        # we can safely sort against the output names of the fold operation (which are now input names).
+        sorted = folded.pick(column(sql="*"))
+        for p in all_partitions:
+            sorted = sorted.sort(column(p.identifier))
+        return sorted.sort(
+            func.cases(
+                *[
+                    (column("step") == step_name, idx)
+                    for idx, step_name in enumerate([top_of_funnel_name, *step_names])
+                ],
+                other=len(step_names) + 1,
+            ).named("step_index"),
+            dir="asc",
+        )
+
+    def funnel_conversion_rate(
+        self,
+        steps: List[Union[str, ColumnExpression, Tuple[str, str]]],
+        *,
+        group: Optional[ColumnExpression] = None,
+        timestamp: Optional[ColumnExpression] = None,
+        event_key: Optional[ColumnExpression] = None,
+        time_limit: Optional[timedelta] = None,
+        partition_start_events: Optional[List[ColumnExpression]] = None,
+        partition_matches: Optional[List[ColumnExpression]] = None,
+        # TODO(HB-9592): Support top_of_funnel_index.
+    ) -> "Model":
+        """
+        Returns a new Model which performs a funnel analysis on the
+        provided sequence of steps, and computes the conversion rate.
+
+        :arg steps: The sequence of steps to analyze. If a string is passed, it will be matched to values in the
+                    `event_key` column. If a boolean column expression is passed, an event will be considered a match
+                    if it passes the condition. A string step value can be a tuple to denote (step_value, output_name)
+                    which can be used to provide unique names when matching the same step multiple times.
+        :arg group: The column to group the funnel analysis by. This is typically a unique identifier for a user/customer/etc.
+        :arg timestamp: The temporal column to order the events by.
+        :arg event_key: The column representing the name of the event.
+        :arg time_limit: The maximum time allowed between the initial funnel step and any subsequent step.
+                    If a user takes longer than this time for a given step, they are not counted in the
+                funnel for that step.
+        :arg partition_start_events: A list of column expressions to partition the first events in the funnel analysis by.
+                                     This can result in single entities being evaluated and counted multiple times in the funnel
+                                     analysis -- once per value of the partitions.
+        :arg partition_matches: A list of named boolean conditions to group a cohort of users together. The funnel
+                                will split the aggregated counts of each step into separate groups for each of these expressions.
+                                This can be used to further break out the entities flowing through the funnel.
+        """
+        # need to resolve these now, and `partition_matches` is resolved later. This is because
+        # the keypaths for partition_matches are resolved via the model outputted by `match_steps`.
+        steps = resolve_all_nested_keypaths(self, steps)
+        group = resolve_all_nested_keypaths(self, group)
+        timestamp = resolve_all_nested_keypaths(self, timestamp)
+        event_key = resolve_all_nested_keypaths(self, event_key)
+        time_limit = resolve_all_nested_keypaths(self, time_limit)
+        partition_start_events = (
+            resolve_all_nested_keypaths(self, partition_start_events) or []
+        )
+
+        activity_schema = self._require_normalized_activity_schema(
+            group, timestamp, event_key, "funnel_conversion_rate"
+        )
+
+        STARTED_COUNT_MEASURE_NAME = "startedCount"
+        CONVERTED_COUNT_MEASURE_NAME = "convertedCount"
+        AVG_SECONDS_TO_CONVERT_MEASURE_NAME = "avgSecondsToConvert"
+        RATE_MEASURE_NAME = "rate"
+
+        if len(steps) == 0:
+            count_distinct_groups = func.count(func.distinct(activity_schema.group))
+            result = self.aggregate(
+                groups=(partition_start_events or []),
+                measures=[
+                    count_distinct_groups.named(STARTED_COUNT_MEASURE_NAME),
+                    count_distinct_groups.named(CONVERTED_COUNT_MEASURE_NAME),
+                    column(value=0).named(AVG_SECONDS_TO_CONVERT_MEASURE_NAME),
+                    column(value=1).named(RATE_MEASURE_NAME),
+                ],
+            )
+            for partition in partition_start_events or []:
+                result = result.sort(column(partition.identifier), dir="asc")
+            return result
+
+        matched = self.match_steps(
+            steps,
+            group=group,
+            timestamp=timestamp,
+            event_key=event_key,
+            time_limit=time_limit,
+            partition_start_events=partition_start_events,
+        )
+
+        # Column expressions (attributes) for partitions to group by, after match_steps.
+        partition_start_events_output_exprs = [
+            column(expr.identifier) for expr in partition_start_events or []
+        ]
+        partition_matches = resolve_all_nested_keypaths(
+            matched, partition_matches or []
+        )
+
+        # Rate measure.
+        normalized_steps = normalize_steps(list(steps), activity_schema)
+
+        first_step_timestamp = activity_schema.timestamp.disambiguated(
+            normalized_steps[0].identifier
+        )
+        last_step_timestamp = activity_schema.timestamp.disambiguated(
+            normalized_steps[-1].identifier
+        )
+
+        rate_measure = (
+            # If the last step has a timestamp (e.g. was matched), then we count this journey in the
+            # numerator of the rate.
+            func.count_if(
+                last_step_timestamp != None,
+            )
+            / func.count_if(first_step_timestamp != None)
+        ).named(RATE_MEASURE_NAME)
+
+        avg_seconds_to_convert_measure = func.avg(
+            func.diff_seconds(last_step_timestamp, first_step_timestamp)
+        ).named(AVG_SECONDS_TO_CONVERT_MEASURE_NAME)
+        started_count_measure = func.count_if(first_step_timestamp != None).named(
+            STARTED_COUNT_MEASURE_NAME
+        )
+        converted_count_measure = func.count_if(last_step_timestamp != None).named(
+            CONVERTED_COUNT_MEASURE_NAME
+        )
+
+        all_partitions = partition_start_events_output_exprs + partition_matches
+
+        # Since we're computing a rate based on users that entered the funnel,
+        # we filter out rows for entities that did not enter the funnel.
+        matched = matched.filter(
+            activity_schema.timestamp.disambiguated(normalized_steps[0].identifier)
+            != None
+        )
+
+        # Aggregate, grouping by the start-event partitions and recording rate, then sort by the start-event partitions in order.
+        res = matched.aggregate(
+            groups=all_partitions,
+            measures=[
+                rate_measure,
+                started_count_measure,
+                converted_count_measure,
+                avg_seconds_to_convert_measure,
+            ],
+        )
+        for expr in all_partitions:
+            res = res.sort(expr, dir="asc")
+        return res
 
     # --- Record Management ---
 
@@ -549,7 +878,9 @@ class Model(Serializable):
         Returns a new Model with only the included attributes.
         """
         self._source = PickSource(self._source, columns)
-        self._attributes = IdentifiableMap(column(c.identifier) for c in columns)
+        self._attributes = IdentifiableMap(
+            column(c.identifier) for c in columns if not c._is_star
+        )
         self._namespaces = IdentifiableMap()
         # we might want to preserve measures if we can inspect them
         # and confirm they only rely on selected columns (?)
@@ -567,13 +898,17 @@ class Model(Serializable):
     @builder_method
     @resolve_keypath_args_from(_.self)
     def sort(
-        self, sort: ColumnExpression, dir: Literal["asc", "desc"] = "asc"
+        self,
+        sort: ColumnExpression,
+        dir: Literal["asc", "desc"] = "asc",
+        nulls: Literal["auto", "first", "last"] = "auto",
     ) -> "Model":
         """
         Returns a new Model with records ordered by the provided column.
         Sort direction `dir` can be either "asc" or "desc" (defaults to "asc").
+        Nulls ordering `nulls` can be "first", "last", or "auto" ("first" when ascending, "last" when descending) (defaults to "auto")
         """
-        self._source = SortSource(self._source, sort, dir)
+        self._source = SortSource(self._source, sort, dir, nulls)
 
     @builder_method
     @resolve_keypath_args_from(_.self)
@@ -603,8 +938,8 @@ class Model(Serializable):
     @resolve_keypath_args_from(_.self)
     def fold(
         self,
-        ids: ColumnExpression,
-        values: ColumnExpression,
+        ids: List[ColumnExpression],
+        values: List[ColumnExpression],
         key_name: Optional[str] = "key",
         value_name: Optional[str] = "value",
     ) -> "Model":
@@ -673,7 +1008,7 @@ class Model(Serializable):
         structure which contains the executed sql query, the results, and
         additional metadata.
         """
-        return post_run_endpoint(
+        return run(
             self,
             freshness=freshness,
             print_warnings=print_warnings,
@@ -712,7 +1047,7 @@ class Model(Serializable):
         be prone to SQL injection if you were to execute it directly. If your
         intent is to execute this query, use `.run` or `.df` instead.
         """
-        return post_run_endpoint(
+        return run(
             self,
             sql_only=True,
             freshness=freshness,
@@ -741,54 +1076,76 @@ class Model(Serializable):
         """
         return self._custom_meta.get(name)
 
+    # --- Utilities ---
+
+    def _require_normalized_activity_schema(
+        self,
+        group: Optional[ColumnExpression],
+        timestamp: Optional[ColumnExpression],
+        event_key: Optional[ColumnExpression],
+        fn_name: str,
+    ):
+        activity_schema = (
+            ModelActivitySchema(group=group, timestamp=timestamp, event_key=event_key)
+            if (group and timestamp and event_key)
+            else self._activity_schema
+        )
+        if not activity_schema:
+            raise ValueError(
+                f"`{fn_name}` requires the model to have an activity schema defined. "
+                + "Use `.with_activity_schema` to define the schema upstream, "
+                + f"or fully qualify `group`, `timestamp` and `event_key` in the call to `{fn_name}`"
+            )
+        return activity_schema
+
     # --- Serialization ---
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
             "type": "model",
-            "connection": self._connection.to_wire_format(),
-            "source": self._source.to_wire_format(),
-            "attributes": [a.to_wire_format() for a in self._attributes],
-            "measures": [m.to_wire_format() for m in self._measures],
-            "namespaces": [n.to_wire_format() for n in self._namespaces],
-            "primaryKey": self._primary_key.to_wire_format(),
+            "connection": self._connection._to_wire_format(),
+            "source": self._source._to_wire_format(),
+            "attributes": [a._to_wire_format() for a in self._attributes],
+            "measures": [m._to_wire_format() for m in self._measures],
+            "namespaces": [n._to_wire_format() for n in self._namespaces],
+            "primaryKey": self._primary_key._to_wire_format(),
             "activitySchema": (
-                self._activity_schema.to_wire_format()
+                self._activity_schema._to_wire_format()
                 if self._activity_schema
                 else None
             ),
             "customMeta": self._custom_meta,
             "linkedResource": (
-                self._linked_resource.to_wire_format()
+                self._linked_resource._to_wire_format()
                 if self._linked_resource
                 else None
             ),
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict):
+    def _from_wire_format(cls, wire: dict):
         assert wire["type"] == "model"
         result = Model()
-        result._connection = DataConnection.from_wire_format(wire["connection"])
-        result._source = Source.from_wire_format(wire["source"])
+        result._connection = Connection._from_wire_format(wire["connection"])
+        result._source = Source._from_wire_format(wire["source"])
         result._attributes = IdentifiableMap(
-            ColumnExpression.from_wire_format(a) for a in wire.get("attributes", [])
+            ColumnExpression._from_wire_format(a) for a in wire.get("attributes", [])
         )
         result._measures = IdentifiableMap(
-            ColumnExpression.from_wire_format(m) for m in wire.get("measures", [])
+            ColumnExpression._from_wire_format(m) for m in wire.get("measures", [])
         )
         result._namespaces = IdentifiableMap(
-            ModelNamespace.from_wire_format(n) for n in wire.get("namespaces", [])
+            ModelNamespace._from_wire_format(n) for n in wire.get("namespaces", [])
         )
-        result._primary_key = ColumnExpression.from_wire_format(wire["primaryKey"])
+        result._primary_key = ColumnExpression._from_wire_format(wire["primaryKey"])
         result._activity_schema = (
-            ModelActivitySchema.from_wire_format(wire["activitySchema"])
+            ModelActivitySchema._from_wire_format(wire["activitySchema"])
             if wire.get("activitySchema")
             else None
         )
         result._custom_meta = wire.get("customMeta", {})
         result._linked_resource = (
-            LinkedResource.from_wire_format(wire["linkedResource"])
+            LinkedResource._from_wire_format(wire["linkedResource"])
             if wire["linkedResource"]
             else None
         )

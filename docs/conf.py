@@ -33,7 +33,7 @@ intersphinx_mapping = {
 
 autodoc_default_options = {
     "member-order": "bysource",
-    "exclude-members": "__weakref__, to_wire_format, from_wire_format",
+    "exclude-members": "__weakref__, _to_wire_format, _from_wire_format",
 }
 autodoc_typehints_format = "short"
 autodoc_preserve_defaults = True

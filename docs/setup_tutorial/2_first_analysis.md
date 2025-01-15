@@ -4,16 +4,11 @@
 .. currentmodule:: hashquery
 ```
 
-This first query will use the demo project to get started.
-
-You can choose to adapt this to your data if you choose. If you get stuck importing
-some content from your project, try `print(project)` to show all your project's
-content.
+This tutorial will use the demo project to get started.
 
 ## Getting the count of items
 
-Let's start simple. We'll import a connection, and count the amount of records
-in a table.
+Let's start simple. We'll import a connection, and count the amount of records in a table.
 
 First, let's import our connection. This does not actually connect to your data
 warehouse, it is just a reference as to what data connection will be
@@ -152,4 +147,4 @@ You can learn about the core concepts and principles of Hashquery under the
 **Concepts** sidebar. For further examples, check out **Common Patterns**. API
 documentation can be found under **API Reference**.
 
-Have fun querying! [Please let us know if you have any feedback, or encounter any issues](/project_info/feedback.md).
+Have fun querying! Please let us know if you have any feedback, or encounter any issues.

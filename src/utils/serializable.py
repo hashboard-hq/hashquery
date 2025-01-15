@@ -10,22 +10,24 @@ from .timeinterval import timeinterval
 HASHQUERY_WIRE_VERSION_KEY = "_version"
 # This is a version number for the wire format of Hashquery.
 # Increase it if you ever make a backwards incompatible change
-# to a `to_wire_format`/`from_wire_format` pair, or if you change
+# to a `_to_wire_format`/`_from_wire_format` pair, or if you change
 # the JSON payload for `RunResults`.
-HASHQUERY_WIRE_VERSION = 6
+HASHQUERY_WIRE_VERSION = 7
 
 
 class Serializable(ABC):
-    def to_wire_format(cls) -> dict:
+    def _to_wire_format(cls) -> dict:
         ...
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> Self:
+    def _from_wire_format(cls, wire: dict) -> Self:
         ...
 
     @classmethod
     def _primitive_to_wire_format(cls, value):
-        if isinstance(value, datetime):
+        if hasattr(value, "_to_wire_format"):
+            return value._to_wire_format()
+        elif isinstance(value, datetime):
             return {"$typeKey": "py.datetime", "iso": value.isoformat()}
         elif isinstance(value, date):
             return {"$typeKey": "py.date", "iso": value.isoformat()}
@@ -63,11 +65,11 @@ class Serializable(ABC):
 
     def __init_subclass__(cls) -> None:
         """
-        When we subclass, update their `to_wire_format`/`from_wire_format`
+        When we subclass, update their `_to_wire_format`/`_from_wire_format`
         methods to populate and validate the wire version keys.
         """
-        orig_to_wire = cls.to_wire_format
-        orig_from_wire = cls.from_wire_format
+        orig_to_wire = cls._to_wire_format
+        orig_from_wire = cls._from_wire_format
 
         @wraps(orig_to_wire)
         def versioned_to_wire_format(self) -> dict:
@@ -89,9 +91,9 @@ class Serializable(ABC):
         versioned_to_wire_format.__versioned__ = True
         versioned_from_wire_format.__versioned__ = True
         if not getattr(orig_to_wire, "__versioned__", False):
-            cls.to_wire_format = versioned_to_wire_format
+            cls._to_wire_format = versioned_to_wire_format
         if not getattr(orig_from_wire, "__versioned__", False):
-            cls.from_wire_format = versioned_from_wire_format
+            cls._from_wire_format = versioned_from_wire_format
 
 
 class WireFormatVersionError(Exception):
@@ -104,9 +106,9 @@ class WireFormatVersionError(Exception):
     def _make_error_message(cls, expected: int, found: int):
         desc_str = "Cannot load Hashquery object."
         is_found_ahead = found > expected
-        # this language is from the perspective of the client; on the server we
-        # catch and rethrow the error as `GleanUserFacingError` with a different
-        # string, with language that makes more sense
+        # this language is from the perspective of the client; on an external
+        # server you should catch and rethrow the error with a different
+        # language that makes more sense
         cause_str = (
             (
                 "This version of Hashquery is no longer supported. "

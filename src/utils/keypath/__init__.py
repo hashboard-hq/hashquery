@@ -1,16 +1,16 @@
-from .keypath import _, KeyPath, BoundKeyPath
+import builtins
+
+from .keypath import BoundKeyPath, KeyPath, _
 from .resolve import (
-    resolve_keypath,
-    resolve_all_nested_keypaths,
-    resolve_keypath_args_from,
     defer_keypath_args,
+    resolve_all_nested_keypaths,
+    resolve_keypath,
+    resolve_keypath_args_from,
 )
 from .unwrap import unwrap_keypath_to_name
 
 # ---------
 
-
-import builtins
 
 # We patch over `len` because the default implementation checks that everything
 # that implements `__len__` returns an integer. KeyPaths intentionally defers

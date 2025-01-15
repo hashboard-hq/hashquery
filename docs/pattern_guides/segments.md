@@ -1,11 +1,6 @@
 # Comparing Segments
 
-Hi there! We're working hard on shipping the first version of
-Hashquery, and have not yet had time to compile a detailed guide
-on segment analysis, nor build native tools within the framework for it.
-
-In the meantime, we've decided to just drop in a code snippet
-that may be adaptable to your needs.
+Example of user segmentation:
 
 ```python
 from hashquery import *

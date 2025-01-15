@@ -1,0 +1,20 @@
+[project]
+name = "hashquery-docs"
+version = "1.0.0"
+authors = [{ name = "Hashboard" }]
+requires-python = ">=3.8"
+# dependencies for just the client:
+dependencies = [
+  "myst-parser>=3.0.1",
+  "sphinx>=7.1.2",
+  "sphinx-autobuild>=2021.3.14",
+  "sphinx-design>=0.5.0",
+  "sphinx-rtd-theme>=3.0.2",
+  "hashquery",
+]
+
+[tool.uv.sources]
+hashquery = { path = ".." }
+
+[tool.setuptools]
+py-modules = []

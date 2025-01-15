@@ -1,9 +1,6 @@
 from typing import *
 
-from .keypath import (
-    KeyPath,
-    KeyPathComponentProperty,
-)
+from .keypath import KeyPath, KeyPathComponentProperty
 
 
 def unwrap_keypath_to_name(keypath: Union[KeyPath, str]) -> str:

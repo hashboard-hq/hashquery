@@ -1,7 +1,7 @@
 from typing import *
 
-from .source import Source
 from ..column_expression import ColumnExpression
+from .source import Source
 
 
 class FilterSource(Source):
@@ -17,17 +17,17 @@ class FilterSource(Source):
 
     __TYPE_KEY__ = "filter"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
-            "base": self.base.to_wire_format(),
-            "condition": self.condition.to_wire_format(),
+            **super()._to_wire_format(),
+            "base": self.base._to_wire_format(),
+            "condition": self.condition._to_wire_format(),
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict):
+    def _from_wire_format(cls, wire: dict):
         assert wire["subType"] == cls.__TYPE_KEY__
         return FilterSource(
-            Source.from_wire_format(wire["base"]),
-            ColumnExpression.from_wire_format(wire["condition"]),
+            Source._from_wire_format(wire["base"]),
+            ColumnExpression._from_wire_format(wire["condition"]),
         )

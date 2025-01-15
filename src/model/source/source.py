@@ -1,5 +1,5 @@
-from typing import *
 from abc import ABC
+from typing import *
 
 from ...utils.serializable import Serializable
 
@@ -25,17 +25,17 @@ class Source(Serializable, ABC):
             )
         SOURCE_TYPE_KEY_REGISTRY[type_key] = cls
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {"type": "source", "subType": self.__TYPE_KEY__}
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> "Source":
+    def _from_wire_format(cls, wire: dict) -> "Source":
         assert wire["type"] == "source"
         type_key = wire["subType"]
         SourceType = SOURCE_TYPE_KEY_REGISTRY.get(type_key)
         if not SourceType:
             raise AssertionError("Unknown Source type key: " + type_key)
-        return SourceType.from_wire_format(wire)
+        return SourceType._from_wire_format(wire)
 
     def _default_identifier(self) -> Optional[str]:
         return None

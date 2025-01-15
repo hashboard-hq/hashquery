@@ -4,15 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hashquery"
-version = "0.2.1"
+version = "0.3.0"
 authors = [{ name = "Hashboard" }]
 requires-python = ">=3.8"
 classifiers = ["Programming Language :: Python :: 3"]
+# dependencies for just the client:
 dependencies = [
-  'typing_extensions',
-  'requests',
-  'pyarrow',
-  'pandas'
+  'dataclasses-json==0.5.4',
+  'datetime-truncate==1.*',
+  'numpy<2',
+  'pandas==1.4.4',
+  'pyarrow==14.*',
+  'python-dateutil',
+  'requests==2.*',
+  'SQLAlchemy==1.4.44',
+  'sqlglot==11.*',
+  'sqlparse==0.5.0',
+  'typing-extensions==4.*',
+]
+
+[project.optional-dependencies]
+duckdb = ['duckdb==1.*', 'duckdb-engine==0.13.1']
+bigquery = [
+  'google-cloud-bigquery==3.*',
+  'google-cloud-bigquery-storage==2.*',
+  'sqlalchemy-bigquery==1.11.*',
 ]
 
 [tool.setuptools]

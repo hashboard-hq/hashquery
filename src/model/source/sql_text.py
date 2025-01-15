@@ -17,13 +17,13 @@ class SqlTextSource(Source):
 
     __TYPE_KEY__ = "sqlText"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
+            **super()._to_wire_format(),
             "sql": self.sql,
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> "SqlTextSource":
+    def _from_wire_format(cls, wire: dict) -> "SqlTextSource":
         assert wire["subType"] == cls.__TYPE_KEY__
         return SqlTextSource(wire["sql"])

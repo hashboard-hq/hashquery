@@ -20,17 +20,18 @@ class TableNameSource(Source):
         if self.schema:
             result += f'"{self.schema}".'
         result += f'"{self.table_name}"'
+        return result
 
     __TYPE_KEY__ = "tableName"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
+            **super()._to_wire_format(),
             "tableName": self.table_name,
             "schema": self.schema,
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> "TableNameSource":
+    def _from_wire_format(cls, wire: dict) -> "TableNameSource":
         assert wire["subType"] == cls.__TYPE_KEY__
         return TableNameSource(wire["tableName"], wire.get("schema", None))

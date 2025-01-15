@@ -1,7 +1,7 @@
 from typing import *
 
-from .column_expression.column_expression import ColumnExpression
 from ..utils.serializable import Serializable
+from .column_expression.column_expression import ColumnExpression
 
 
 class ModelActivitySchema(Serializable):
@@ -22,19 +22,19 @@ class ModelActivitySchema(Serializable):
 
     # --- Serialization ---
 
-    def to_wire_format(self) -> Dict:
+    def _to_wire_format(self) -> Dict:
         return {
             "type": "modelActivitySchema",
-            "group": self.group.to_wire_format(),
-            "timestamp": self.timestamp.to_wire_format(),
-            "eventKey": self.event_key.to_wire_format(),
+            "group": self.group._to_wire_format(),
+            "timestamp": self.timestamp._to_wire_format(),
+            "eventKey": self.event_key._to_wire_format(),
         }
 
     @classmethod
-    def from_wire_format(cls, wire: Dict) -> "ModelActivitySchema":
+    def _from_wire_format(cls, wire: Dict) -> "ModelActivitySchema":
         assert wire["type"] == "modelActivitySchema"
         return ModelActivitySchema(
-            group=ColumnExpression.from_wire_format(wire["group"]),
-            timestamp=ColumnExpression.from_wire_format(wire["timestamp"]),
-            event_key=ColumnExpression.from_wire_format(wire["eventKey"]),
+            group=ColumnExpression._from_wire_format(wire["group"]),
+            timestamp=ColumnExpression._from_wire_format(wire["timestamp"]),
+            event_key=ColumnExpression._from_wire_format(wire["eventKey"]),
         )

@@ -18,7 +18,7 @@ class LinkedResource(Serializable):
         self.alias = alias
         self.project_id = project_id
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
             "id": self.id,
             "alias": self.alias,
@@ -26,7 +26,7 @@ class LinkedResource(Serializable):
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict):
+    def _from_wire_format(cls, wire: dict):
         return LinkedResource(
             id=wire["id"],
             alias=wire["alias"],

@@ -1,5 +1,5 @@
-from typing import *
 from os import environ
+from typing import *
 
 
 def env_with_fallback(*names: List[str]) -> Optional[str]:

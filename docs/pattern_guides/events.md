@@ -26,9 +26,8 @@ actors (split by `activity_schema.group`) reached each stage of the funnel.
 ```python
 events.funnel(
   # replace these with the events sequence you care about
-  "ad_impression",
-  "visit",
-  "purchase",
+  top_of_funnel="users",
+  steps=["ad_impression", "visit", "purchase"],
 )
 ```
 
@@ -36,7 +35,7 @@ May result in a table like the following:
 
 | step          | count  |
 | ------------- | ------ |
-| count         | 30,040 |
+| users         | 30,040 |
 | ad_impression | 27,028 |
 | visit         | 8,794  |
 | purchase      | 2,341  |
@@ -47,7 +46,7 @@ then `2,341` made at least one purchase.
 
 Note that if a user purchased something, but didn't see an ad _before_ their
 purchase, they wouldn't be included in the funnel. They would only counted in
-the `count` row. Users must match every proceeding step _in order_ to be
+the `users` row. Users must match every proceeding step _in order_ to be
 included in step in the funnel. For this reason, funnels _strictly decrease_
 as they move downward.
 
@@ -75,8 +74,8 @@ events = events.with_activity_schema(
 Once we have our events set up, let's define two funnels:
 
 ```python
-funnel_a = events.funnel("ad_impression_a", "visit", "purchase")
-funnel_b = events.funnel("ad_impression_b", "visit", "purchase")
+funnel_a = events.funnel(["ad_impression_a", "visit", "purchase"])
+funnel_b = events.funnel(["ad_impression_b", "visit", "purchase"])
 ```
 
 and then we'll join them together to form a new table:
@@ -130,11 +129,11 @@ list of events for a user.
 Similar to `.funnel` we pass it an ordered list of steps to match:
 
 ```python
-events.match_steps(
+events.match_steps([
   "ad_impression",
   "visit",
   "purchase",
-)
+])
 ```
 
 Unlike `.funnel`, which aggregates into a summary table, `.match_steps` actually
@@ -156,7 +155,7 @@ we added to `.with_activity_schema`.
 | user_a | 2024-01-04 | purchase      | +$40   | d4       |
 | user_a | 2024-01-05 | ad_impression | -$0.05 | e5       |
 
-Now we run `.match_steps("ad_impression", "purchase")`. For each user,
+Now we run `.match_steps(["ad_impression", "purchase"])`. For each user,
 this will construct one row. Let's look at the `user_a` row:
 
 <div class="wy-table-responsive">

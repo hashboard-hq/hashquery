@@ -1,11 +1,12 @@
+import re
 from copy import deepcopy
 from typing import *
-import re
 
-from .column_expression import ColumnExpression
-from ..namespace import ModelNamespace
 from ...utils.builder import builder_method
-from ...utils.keypath.keypath import _, KeyPath, BoundKeyPath, KeyPathComponentCall
+from ...utils.keypath.keypath import BoundKeyPath, KeyPath, KeyPathComponentCall, _
+from ...utils.keypath.resolve import defer_keypath_args
+from ..namespace import ModelNamespace
+from .column_expression import ColumnExpression
 
 if TYPE_CHECKING:
     from ..model import Model
@@ -40,16 +41,18 @@ class SqlTextColumnExpression(ColumnExpression):
         self.sql = sql
         self.namespace_identifier: Optional[str] = None
         self.nested_expressions: Dict[str, ColumnExpression] = {}
+        self._unstable_type: Optional[str] = None
 
     def default_identifier(self) -> str:
         tokens = self.sql.split(".")
         if len(tokens) == 1 and tokens[0].isidentifier():
-            return tokens[1]  # column expression is directly nameable
+            return tokens[0]  # column expression is directly nameable
         elif len(tokens) == 2 and tokens[1].isidentifier():
             return tokens[1]  # passthrough a name through a namespace
         else:
             return None
 
+    @defer_keypath_args
     @builder_method
     def disambiguated(self, namespace) -> "SqlTextColumnExpression":
         self.namespace_identifier = (
@@ -62,6 +65,15 @@ class SqlTextColumnExpression(ColumnExpression):
             for id, expr in self.nested_expressions.items()
         }
 
+    def named(self, name) -> "SqlTextColumnExpression":
+        if self._is_star:
+            raise ValueError("A `*` expression cannot be named.`")
+        return super().named(name)
+
+    @property
+    def _is_star(self):
+        return self.sql == "*"
+
     def __repr__(self) -> str:
         return f'sql("{self.sql}")'
 
@@ -69,7 +81,7 @@ class SqlTextColumnExpression(ColumnExpression):
 
     def bind_references_to_model(
         self,
-        model: "Model",
+        model: Union["Model", KeyPath],
         _mutate_in_place=False,  # escape hatch to do this in place
     ) -> "SqlTextColumnExpression":
         """
@@ -120,24 +132,26 @@ class SqlTextColumnExpression(ColumnExpression):
 
     __TYPE_KEY__ = "sqlText"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
+            **super()._to_wire_format(),
             "sql": self.sql,
             "namespaceIdentifier": self.namespace_identifier,
             "nestedExpressions": {
-                id: expr.to_wire_format()
+                id: expr._to_wire_format()
                 for id, expr in self.nested_expressions.items()
             },
+            "_unstable_type": self._unstable_type,
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> "SqlTextColumnExpression":
+    def _from_wire_format(cls, wire: dict) -> "SqlTextColumnExpression":
         assert wire["subType"] == cls.__TYPE_KEY__
         result = SqlTextColumnExpression(wire["sql"])
+        result._unstable_type = wire.get("_unstable_type")
         result.namespace_identifier = wire.get("namespaceIdentifier")
         result.nested_expressions = {
-            id: ColumnExpression.from_wire_format(expr_wire)
+            id: ColumnExpression._from_wire_format(expr_wire)
             for id, expr_wire in wire.get("nestedExpressions", {}).items()
         }
         result._from_wire_format_shared(wire)

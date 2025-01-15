@@ -1,14 +1,10 @@
-from .model.model import Model
-from .model.column import column
-from . import func
-from .hashboard_api.default_project import default_project as project
-from .model.accessors import attr, msr, rel
+from .model import Connection, Model, attr, column, func, msr, rel
 
 __all__ = [
+    "Connection",
     "Model",
     "column",
     "func",
-    "project",
     "attr",
     "msr",
     "rel",

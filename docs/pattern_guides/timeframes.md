@@ -1,12 +1,6 @@
 # Comparing Time Frames
 
-Hi there! We're working hard on shipping the first version of
-Hashquery, and have not yet had time to compile a detailed guide
-on period over period analysis, nor build native tools within the
-framework for it.
-
-In the meantime, we've decided to just drop in a code snippet
-that may be adaptable to your needs.
+Example of comparing time frames within the same data series:
 
 ```python
 from hashquery import *

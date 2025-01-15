@@ -1,7 +1,8 @@
-from typing import *
-from functools import wraps
-from typing_extensions import Self
 from copy import deepcopy
+from functools import wraps
+from typing import *
+
+from typing_extensions import Self
 
 
 def builder_method(mutator_func):

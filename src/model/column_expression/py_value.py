@@ -1,7 +1,7 @@
 from typing import *
 
-from .column_expression import ColumnExpression
 from ...utils.builder import builder_method
+from .column_expression import ColumnExpression
 
 
 class PyValueColumnExpression(ColumnExpression):
@@ -30,14 +30,14 @@ class PyValueColumnExpression(ColumnExpression):
 
     __TYPE_KEY__ = "pyValue"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
+            **super()._to_wire_format(),
             "value": self._primitive_to_wire_format(self.value),
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> "PyValueColumnExpression":
+    def _from_wire_format(cls, wire: dict) -> "PyValueColumnExpression":
         assert wire["subType"] == cls.__TYPE_KEY__
         return PyValueColumnExpression(
             cls._primitive_from_wire_format(wire["value"])

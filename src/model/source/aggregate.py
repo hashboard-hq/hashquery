@@ -1,7 +1,7 @@
 from typing import *
 
-from .source import Source
 from ..column_expression import ColumnExpression
+from .source import Source
 
 
 class AggregateSource(Source):
@@ -29,19 +29,19 @@ class AggregateSource(Source):
 
     __TYPE_KEY__ = "aggregate"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
-            "base": self.base.to_wire_format(),
-            "groups": [g.to_wire_format() for g in self.groups],
-            "measures": [m.to_wire_format() for m in self.measures],
+            **super()._to_wire_format(),
+            "base": self.base._to_wire_format(),
+            "groups": [g._to_wire_format() for g in self.groups],
+            "measures": [m._to_wire_format() for m in self.measures],
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict):
+    def _from_wire_format(cls, wire: dict):
         assert wire["subType"] == cls.__TYPE_KEY__
         return AggregateSource(
-            Source.from_wire_format(wire["base"]),
-            groups=[ColumnExpression.from_wire_format(g) for g in wire["groups"]],
-            measures=[ColumnExpression.from_wire_format(m) for m in wire["measures"]],
+            Source._from_wire_format(wire["base"]),
+            groups=[ColumnExpression._from_wire_format(g) for g in wire["groups"]],
+            measures=[ColumnExpression._from_wire_format(m) for m in wire["measures"]],
         )

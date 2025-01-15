@@ -1,11 +1,11 @@
-from typing import *
 from dataclasses import dataclass
+from typing import *
 
 from .keypath import (
     KeyPath,
+    KeyPathComponentCall,
     KeyPathComponentProperty,
     KeyPathComponentSubscript,
-    KeyPathComponentCall,
 )
 
 

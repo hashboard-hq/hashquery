@@ -1,9 +1,11 @@
 import inspect
 from functools import wraps
+from types import GeneratorType
 from typing import Any
 
 from .keypath import (
     BoundKeyPath,
+    IterItemKeyPath,
     KeyPath,
     KeyPathComponentCall,
     KeyPathComponentProperty,
@@ -24,8 +26,15 @@ def resolve_keypath(root: Any, keypath: KeyPath) -> Any:
         return keypath
 
     current = root
-    if type(keypath) == BoundKeyPath:
+    if type(keypath) is BoundKeyPath:
         current = keypath._bound_root
+
+    if type(keypath) is IterItemKeyPath:
+        base = resolve_keypath(root, keypath._keypath_iter_base)
+        return [
+            resolve_all_nested_keypaths(item, keypath._keypath_item_template)
+            for item in base
+        ]
 
     for component_idx, component in enumerate(keypath._key_path_components):
         if type(component) is KeyPathComponentProperty:
@@ -66,9 +75,18 @@ def resolve_all_nested_keypaths(root: Any, values) -> Any:
             for key, nested in values.items()
         }
     elif type(values) is list:
-        return [resolve_all_nested_keypaths(root, nested) for nested in values]
+        result = []
+        for nested in values:
+            resolved = resolve_all_nested_keypaths(root, nested)
+            if isinstance(nested, IterItemKeyPath):
+                result.extend(resolved)
+            else:
+                result.append(resolved)
+        return result
     elif type(values) is tuple:
-        return (resolve_all_nested_keypaths(root, nested) for nested in values)
+        return tuple(resolve_all_nested_keypaths(root, list(values)))
+    elif isinstance(values, GeneratorType):
+        return resolve_all_nested_keypaths(root, [i for i in values])
     elif isinstance(values, KeyPath):
         # a KeyPath may result in a structure containing more KeyPaths,
         # which we need to further resolve
@@ -198,3 +216,10 @@ def _has_keypath(values):
     elif type(values) in (list, tuple):
         return any(_has_keypath(nested) for nested in values)
     return False
+
+
+def _try_get_iter(maybe_iterable):
+    try:
+        return iter(maybe_iterable)
+    except TypeError:
+        return None

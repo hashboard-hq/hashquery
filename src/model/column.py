@@ -4,8 +4,8 @@ from ..utils.keypath.keypath import _
 from .column_expression import (
     ColumnExpression,
     ColumnNameColumnExpression,
-    SqlTextColumnExpression,
     PyValueColumnExpression,
+    SqlTextColumnExpression,
 )
 
 
@@ -72,8 +72,24 @@ def column(
        the provided Python value. For example, `None` is translated to `NULL`.
     """
     if name:
+        if name == "*":
+            raise ValueError(AMBIGUOUS_STAR_COL_ERROR_MSG)
         return ColumnNameColumnExpression(name)
     elif sql:
         return SqlTextColumnExpression(sql).bind_references_to_model(_)
     else:
         return PyValueColumnExpression(value)
+
+
+AMBIGUOUS_STAR_COL_ERROR_MSG = """
+`column("*")` is ambiguous.
+
+Did you intend to reference all attributes on a model?
+Use `*attr` or `*rel.relation_name`.
+
+If you explicitly want to render the `*` operator into the SQL, use
+`column(sql="*")`. Note that this approach will result in selecting the
+underlying physical columns in tables or nested CTEs, which Hashquery does
+not guarantee the consistency of. This will limit the ability to reuse
+models and compose queries.
+"""

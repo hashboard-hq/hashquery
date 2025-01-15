@@ -77,14 +77,13 @@ funnel = (
       event_key=attr.event_type
   )
   .funnel(
-	  "ad_impression",
-	  "add_to_cart",
-	  "buy")
+    top_of_funnel="users",
+	  steps=["ad_impression", "add_to_cart", "buy"])
 )
 print(funnel.run().df)
 """
             step  count
-0          count    501
+0          users    501
 1  ad_impression    495
 2    add_to_cart    465
 3            buy    264

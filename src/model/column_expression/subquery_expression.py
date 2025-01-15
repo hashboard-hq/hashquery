@@ -1,7 +1,7 @@
 from typing import *
 
-from .column_expression import ColumnExpression
 from ...utils.builder import builder_method
+from .column_expression import ColumnExpression
 
 if TYPE_CHECKING:
     from ..model import Model
@@ -27,15 +27,15 @@ class SubqueryColumnExpression(ColumnExpression):
 
     __TYPE_KEY__ = "subquery"
 
-    def to_wire_format(self) -> dict:
-        return {**super().to_wire_format(), "model": self.model.to_wire_format()}
+    def _to_wire_format(self) -> dict:
+        return {**super()._to_wire_format(), "model": self.model._to_wire_format()}
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> "ColumnExpression":
+    def _from_wire_format(cls, wire: dict) -> "ColumnExpression":
         from ..model import Model
 
         assert wire["subType"] == cls.__TYPE_KEY__
-        model = Model.from_wire_format(wire["model"])
+        model = Model._from_wire_format(wire["model"])
         result = SubqueryColumnExpression(model)
         result._from_wire_format_shared(wire)
         return result

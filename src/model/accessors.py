@@ -1,9 +1,8 @@
 from typing import *
 
-from ..utils.keypath.keypath import _, KeyPathComponentCall
+from ..utils.keypath.keypath import KeyPathComponentCall, KeyPathComponentProperty, _
 from .column_expression.column_expression import ColumnExpression
 from .namespace import ModelNamespace
-
 
 T = TypeVar("T")
 
@@ -27,6 +26,12 @@ class LazyAccessor(Generic[T]):
 
     def __getitem__(self, key: str) -> T:
         return self.__getattr__(key)
+
+    def __len__(self):
+        return len(_.__chain__([KeyPathComponentProperty(self.__map_name__)]))
+
+    def __iter__(self):
+        return iter(_.__chain__([KeyPathComponentProperty(self.__map_name__)]))
 
 
 attr = LazyAccessor[ColumnExpression]("_attributes")

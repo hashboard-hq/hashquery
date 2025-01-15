@@ -1,8 +1,9 @@
 from typing import *
 
-from .column_expression import ColumnExpression
-from ..namespace import ModelNamespace
 from ...utils.builder import builder_method
+from ...utils.keypath.resolve import defer_keypath_args
+from ..namespace import ModelNamespace
+from .column_expression import ColumnExpression
 
 
 class ColumnNameColumnExpression(ColumnExpression):
@@ -12,10 +13,9 @@ class ColumnNameColumnExpression(ColumnExpression):
         self._namespace_identifier: Optional[str] = None
 
     def default_identifier(self) -> str:
-        if self.column_name.isidentifier():
-            return self.column_name
-        return None
+        return self.column_name
 
+    @defer_keypath_args
     @builder_method
     def disambiguated(self, namespace) -> "ColumnNameColumnExpression":
         self._namespace_identifier = (
@@ -31,15 +31,15 @@ class ColumnNameColumnExpression(ColumnExpression):
 
     __TYPE_KEY__ = "columnName"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
+            **super()._to_wire_format(),
             "columnName": self.column_name,
             "namespaceIdentifier": self._namespace_identifier,
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> "ColumnNameColumnExpression":
+    def _from_wire_format(cls, wire: dict) -> "ColumnNameColumnExpression":
         assert wire["subType"] == cls.__TYPE_KEY__
         result = ColumnNameColumnExpression(wire["columnName"])
         result._namespace_identifier = wire["namespaceIdentifier"]

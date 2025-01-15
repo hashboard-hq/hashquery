@@ -1,7 +1,7 @@
 from typing import *
 
-from .column_expression.column_expression import ColumnExpression
 from ..utils.serializable import Serializable
+from .column_expression.column_expression import ColumnExpression
 
 if TYPE_CHECKING:
     from .model import Model
@@ -19,6 +19,7 @@ class ModelNamespace(Serializable):
     ) -> None:
         self._identifier = identifier
         self._nested_model = nested_model
+        self._through_foreign_key_attr: Optional[ColumnExpression] = None
 
     # --- Public accessors ---
 
@@ -35,6 +36,12 @@ class ModelNamespace(Serializable):
                 f"No attribute with the identifier `{name}` was found "
                 + f"in the `{self._identifier}` namespace."
             ) from err
+
+    def __getitem__(self, key: str) -> ColumnExpression:
+        return self.__getattr__(key)
+
+    def __iter__(self):
+        return iter(a.disambiguated(self) for a in self._nested_model._attributes)
 
     def get_custom_meta(self, name: str):
         """
@@ -53,19 +60,29 @@ class ModelNamespace(Serializable):
 
     # --- Serialization ---
 
-    def to_wire_format(self) -> Dict:
+    def _to_wire_format(self) -> Dict:
         return {
             "type": "modelNamespace",
             "identifier": self._identifier,
-            "nestedModel": self._nested_model.to_wire_format(),
+            "nestedModel": self._nested_model._to_wire_format(),
+            "throughForeignKeyAttr": (
+                self._through_foreign_key_attr._to_wire_format()
+                if self._through_foreign_key_attr
+                else None
+            ),
         }
 
     @classmethod
-    def from_wire_format(cls, wire: Dict) -> "ModelNamespace":
+    def _from_wire_format(cls, wire: Dict) -> "ModelNamespace":
         from .model import Model  # need the actual implementation
 
         assert wire["type"] == "modelNamespace"
-        return ModelNamespace(
+        result = ModelNamespace(
             identifier=wire["identifier"],
-            nested_model=Model.from_wire_format(wire["nestedModel"]),
+            nested_model=Model._from_wire_format(wire["nestedModel"]),
         )
+        if fkattr_wire := wire.get("throughForeignKeyAttr"):
+            result._through_foreign_key_attr = ColumnExpression._from_wire_format(
+                fkattr_wire
+            )
+        return result

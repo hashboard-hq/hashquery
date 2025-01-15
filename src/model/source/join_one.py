@@ -1,9 +1,8 @@
 from typing import *
 
-
-from .source import Source
-from ..namespace import ModelNamespace
 from ..column_expression.column_expression import ColumnExpression
+from ..namespace import ModelNamespace
+from .source import Source
 
 
 class JoinOneSource(Source):
@@ -30,21 +29,21 @@ class JoinOneSource(Source):
 
     __TYPE_KEY__ = "joinOne"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
-            "base": self.base.to_wire_format(),
-            "relation": self.relation.to_wire_format(),
-            "joinCondition": self.join_condition.to_wire_format(),
+            **super()._to_wire_format(),
+            "base": self.base._to_wire_format(),
+            "relation": self.relation._to_wire_format(),
+            "joinCondition": self.join_condition._to_wire_format(),
             "dropUnmatched": self.drop_unmatched,
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict):
+    def _from_wire_format(cls, wire: dict):
         assert wire["subType"] == cls.__TYPE_KEY__
         return JoinOneSource(
-            base=Source.from_wire_format(wire["base"]),
-            relation=ModelNamespace.from_wire_format(wire["relation"]),
-            join_condition=ColumnExpression.from_wire_format(wire["joinCondition"]),
+            base=Source._from_wire_format(wire["base"]),
+            relation=ModelNamespace._from_wire_format(wire["relation"]),
+            join_condition=ColumnExpression._from_wire_format(wire["joinCondition"]),
             drop_unmatched=wire["dropUnmatched"],
         )

@@ -1,8 +1,8 @@
 from typing import *
 
 from ...utils.builder import builder_method
-from .py_value import PyValueColumnExpression
 from .column_expression import ColumnExpression
+from .py_value import PyValueColumnExpression
 
 
 class SqlFunctionColumnExpression(ColumnExpression):
@@ -52,25 +52,25 @@ class SqlFunctionColumnExpression(ColumnExpression):
 
     __TYPE_KEY__ = "sqlFunction"
 
-    def to_wire_format(self) -> Any:
+    def _to_wire_format(self) -> Any:
         return {
-            **super().to_wire_format(),
+            **super()._to_wire_format(),
             "functionName": self.function_name,
             "args": [
-                arg.to_wire_format() if hasattr(arg, "to_wire_format") else arg
+                arg._to_wire_format() if hasattr(arg, "_to_wire_format") else arg
                 for arg in self.args
             ],
             "inheritIdentifier": self.inherit_identifier,
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict) -> "SqlFunctionColumnExpression":
+    def _from_wire_format(cls, wire: dict) -> "SqlFunctionColumnExpression":
         assert wire["subType"] == cls.__TYPE_KEY__
 
         function_name = wire["functionName"]
         args = [
             (
-                ColumnExpression.from_wire_format(arg)
+                ColumnExpression._from_wire_format(arg)
                 if (type(arg) == dict and arg.get("type") == "columnExpression")
                 else arg
             )

@@ -2,26 +2,32 @@ from typing import *
 from typing import List
 
 
-class KeyPathComponentProperty:
+class KeyPathComponent:
+    pass
+
+
+class KeyPathComponentProperty(KeyPathComponent):
     """
     Component of a KeyPath which represents property access.
     `root.property`
     """
 
     def __init__(self, name: str) -> None:
+        super().__init__()
         self.name = name
 
     def __repr__(self) -> str:
         return f".{self.name}"
 
 
-class KeyPathComponentSubscript:
+class KeyPathComponentSubscript(KeyPathComponent):
     """
     Component of a KeyPath which represents subscript access.
     `root["item"]`
     """
 
     def __init__(self, key: Union[str, int]) -> None:
+        super().__init__()
         self.key = key
 
     def __repr__(self) -> str:
@@ -30,7 +36,7 @@ class KeyPathComponentSubscript:
         return f"[{self.key}]"
 
 
-class KeyPathComponentCall:
+class KeyPathComponentCall(KeyPathComponent):
     """
     Component of a KeyPath which represents calling a value as a function.
     `root(arg1, arg2)` or `root.__call__(arg1, arg2)`
@@ -42,6 +48,7 @@ class KeyPathComponentCall:
         kwargs: Dict[str, Any],
         include_keypath_ctx: bool = False,
     ) -> None:
+        super().__init__()
         self.args = args or []
         self.kwargs = kwargs or {}
         self.include_keypath_ctx = include_keypath_ctx
@@ -144,25 +151,13 @@ class KeyPath:
 
     def __init__(
         self,
-        components: List[
-            Union[
-                KeyPathComponentProperty,
-                KeyPathComponentSubscript,
-                KeyPathComponentCall,
-            ]
-        ],
+        components: List[KeyPathComponent],
     ) -> None:
         self._key_path_components = components
 
     def __chain__(
         self,
-        components: List[
-            Union[
-                KeyPathComponentProperty,
-                KeyPathComponentSubscript,
-                KeyPathComponentCall,
-            ]
-        ],
+        components: List[KeyPathComponent],
     ):
         return KeyPath([*self._key_path_components, *components])
 
@@ -174,6 +169,9 @@ class KeyPath:
 
     def __call__(self, *args: Any, **kwargs: Any) -> "KeyPath":
         return self.__chain__([KeyPathComponentCall(args, kwargs)])
+
+    def __iter__(self):
+        return iter([IterItemKeyPath(self, [])])
 
     def __repr__(self) -> str:
         return f"KeyPath({''.join(str(kpc) for kpc in self._key_path_components)})"
@@ -189,31 +187,67 @@ class BoundKeyPath(KeyPath):
     def __init__(
         self,
         bound_root,
-        components: List[
-            Union[
-                KeyPathComponentProperty,
-                KeyPathComponentSubscript,
-                KeyPathComponentCall,
-            ]
-        ],
+        components: List[KeyPathComponent],
     ) -> None:
         super().__init__(components)
         self._bound_root = bound_root
 
     def __chain__(
         self,
-        components: List[
-            Union[
-                KeyPathComponentProperty,
-                KeyPathComponentSubscript,
-                KeyPathComponentCall,
-            ]
-        ],
+        components: List[KeyPathComponent],
     ):
         return BoundKeyPath(self._bound_root, [*self._key_path_components, *components])
 
     def __repr__(self) -> str:
         return f"BoundKeyPath({self._bound_root} -> {''.join(str(kpc) for kpc in self._key_path_components)})"
+
+
+class IterItemKeyPath(KeyPath):
+    """
+    Represents a templated item inside of an iterator context.
+    When `KeyPath.__iter__()` is called, we must immediately return something,
+    so we return a real list containing a single `IterItemKeyPath`. Users
+    can chain off that single item to form a more complex expression (like
+    they can for any `KeyPath`).
+
+    When the list is resolved with `resolve_all_nested_keypaths`,
+    `IterItemKeyPath`s are expanded out -- so instead of being a nested list
+    they appear alongside things at the top level.
+
+    Take the following example::
+
+        [1, 2, *(s + 1 for s in _.some_numbers)]
+        # translates immediately into
+        [1, 2, IterItemKeyPath(
+            _.some_strings,
+            _.__add__(1)
+        )]
+        # and during resolve, that single `IterItemKeyPath` may turn into
+        # multiple values, all at the top level
+        [1, 2, 3, 4, 5, 6]
+
+    """
+
+    def __init__(
+        self,
+        base: KeyPath,
+        components: List[KeyPathComponent],
+    ) -> None:
+        super().__init__(components)
+        self._keypath_iter_base = base
+        self._keypath_item_template = KeyPath(components)
+
+    def __chain__(
+        self,
+        components: List[KeyPathComponent],
+    ):
+        return IterItemKeyPath(
+            self._keypath_iter_base,
+            [*self._key_path_components, *components],
+        )
+
+    def __repr__(self) -> str:
+        return f"IterKeyPath({str(self._keypath_iter_base)} -> {''.join(str(kpc) for kpc in self._key_path_components)})"
 
 
 # Attach methods to forward calls like `_.path.to.thing + _.other_thing`
@@ -269,7 +303,6 @@ for u_op in UNARY_OP_MAGIC_METHODS:
     # otherwise all the functions will all point to `__neg__` (the last string in the list)
     def make_impl(u_op):
         def impl(self: KeyPath) -> KeyPath:
-            print(u_op)
             return self.__chain__(
                 [
                     KeyPathComponentProperty(u_op),

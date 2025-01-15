@@ -1,7 +1,7 @@
 from typing import *
 
-from .source import Source
 from ..column_expression import ColumnExpression
+from .source import Source
 
 
 class PickSource(Source):
@@ -17,17 +17,17 @@ class PickSource(Source):
 
     __TYPE_KEY__ = "pick"
 
-    def to_wire_format(self) -> dict:
+    def _to_wire_format(self) -> dict:
         return {
-            **super().to_wire_format(),
-            "base": self.base.to_wire_format(),
-            "columns": [c.to_wire_format() for c in self.columns],
+            **super()._to_wire_format(),
+            "base": self.base._to_wire_format(),
+            "columns": [c._to_wire_format() for c in self.columns],
         }
 
     @classmethod
-    def from_wire_format(cls, wire: dict):
+    def _from_wire_format(cls, wire: dict):
         assert wire["subType"] == cls.__TYPE_KEY__
         return PickSource(
-            Source.from_wire_format(wire["base"]),
-            [ColumnExpression.from_wire_format(s) for s in wire["columns"]],
+            Source._from_wire_format(wire["base"]),
+            [ColumnExpression._from_wire_format(s) for s in wire["columns"]],
         )
